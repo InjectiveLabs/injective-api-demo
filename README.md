@@ -1,3 +1,3 @@
-# mm_api_demo
+# api_demo
 
-Here we include some sample api code samples for our external market makers. 
+Here we include some sample api code samples in both Python and GO. 
