@@ -1,3 +1,6 @@
+# injective folder
+*/var/data/injective-888/
+
 .DS_Store
 
 # Byte-compiled / optimized / DLL files
@@ -7,6 +10,7 @@ __pycache__/
 
 # C extensions
 *.so
+
 
 # Distribution / packaging
 .Python
