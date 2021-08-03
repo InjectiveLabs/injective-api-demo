@@ -1,49 +1,39 @@
-
-# Copyright 2021 Injective Labs
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# import sdk_python.exchange_api as exchange_api
-
 import asyncio
+import json
 import logging
 import os
 import pdb
 import sys
+
+import aiohttp
 import grpc
 
 from constant import *
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 SDK_PATH = os.path.join(_current_dir, "sdk_python")
-EXCHANGE_API_PATH = os.path.join(SDK_PATH, "exchange_api")
-print("sdk_python directory:{}".format(SDK_PATH))
-sys.path.insert(0, EXCHANGE_API_PATH)
+sys.path.insert(0, SDK_PATH)
 
-print("exchange api directory:{}".format(EXCHANGE_API_PATH))
 
-# injective_spot_exchange_rpc.SpotLimitOrder
 
-import injective_accounts_rpc_pb2_grpc as accounts_rpc_grpc
-import injective_accounts_rpc_pb2 as accounts_rpc_pb
-import injective_spot_exchange_rpc_pb2_grpc as spot_exchange_rpc_grpc
-import injective_spot_exchange_rpc_pb2 as spot_exchange_rpc_pb
-import injective_exchange_rpc_pb2_grpc as exchange_rpc_grpc
-import injective_exchange_rpc_pb2 as exchange_rpc_pb
+import exchange_api.injective_accounts_rpc_pb2 as accounts_rpc_pb
+import exchange_api.injective_accounts_rpc_pb2_grpc as accounts_rpc_grpc
+import exchange_api.injective_exchange_rpc_pb2 as exchange_rpc_pb
+import exchange_api.injective_exchange_rpc_pb2_grpc as exchange_rpc_grpc
+import exchange_api.injective_spot_exchange_rpc_pb2 as spot_exchange_rpc_pb
+import exchange_api.injective_spot_exchange_rpc_pb2_grpc as spot_exchange_rpc_grpc
+from chainclient._transaction import Transaction as Transaction
+from chainclient._wallet import generate_wallet as generate_wallet
+from chainclient._wallet import privkey_to_address as privkey_to_address
+from chainclient._wallet import privkey_to_pubkey as privkey_to_pubkey
+from chainclient._wallet import pubkey_to_address as pubkey_to_address
+from chainclient._wallet import seed_to_privkey as seed_to_privkey
+
 
 class MarketMaker(object):
-    def __init__(self, account_id: str, spot_symbol: str, spot_market_id=None):
+    def __init__(self, account_id: str, spot_symbol: str, private_key: str, spot_market_id=None):
         self.acct_id = account_id
+        self.private_key = private_key
         self.spot_symbol = spot_symbol + '_SPOT'
         if spot_market_id is not None:
             self.spot_market_id = spot_market_id
@@ -82,39 +72,151 @@ class MarketMaker(object):
 
     async def account_steam(self):
         async with grpc.aio.insecure_channel('localhost:9910') as channel:
-
-            # accounts_rpc = accounts_rpc_grpc.InjectiveAccountsRPCStub(channel)
             accounts_exchange_rpc = accounts_rpc_grpc.InjectiveAccountsRPCStub(
                 channel)
 
-            # # my account
-            # acct_id = "0xbdAEdEc95d563Fb05240d6e01821008454c24C36000000000000000000000000"
-            # # default account
-            # # acct_id = "0xaf79152ac5df276d9a8e1e2e22822f9713474902000000000000000000000000"
             ord_direction = "buy"
             sub_balance_stream = accounts_exchange_rpc.StreamSubaccountBalance(
                 accounts_rpc_pb.SubaccountBalance(subaccount_id=self.acct_id))
 
             async for sub_balance in sub_balance_stream:
-                # acc = await accounts_exchange_rpc.SubaccountOrderSummary(accounts_rpc_pb.SubaccountOrderSummaryRequest(subaccount_id=acct_id, order_direction=ord_direction))
                 print("\n\033[1;34;40m API Response  \n")
                 print("\033[0;37;40m\n-- Order Update:", sub_balance)
 
-    async def buy(self, price, quantity):
-        async with grpc.aio.insecure_channel('localhost:9910') as channel:
-            spot_exchange_rpc = spot_exchange_rpc_grpc.InjectiveSpotExchangeRPCStub(
-                channel)
-            order_request = spot_exchange_rpc_pb.SpotLimitOrder(
-                order_side='buy', market_id=self.market_id, subaccount_id=self.acct_id, price=price, quantity=quantity)
-            order_return = spot_exchange_rpc.Order(order_request)
-            print(order_return)
+    async def send_tx_test(self):
+        sender_pk = seed_to_privkey(
+            "physical page glare junk return scale subject river token door mirror title")
+        sender_acc_addr = privkey_to_address(sender_pk)
+        print("Sender Account:", sender_acc_addr)
+        print("sender private key:{}".format(sender_pk))
 
+        # To Check:
+        #   $ injectived --home ./var/data/injective-888/n0 --keyring-backend test keys show user1
+        #   address: inj1hkhdaj2a2clmq5jq6mspsggqs32vynpk228q3r
+
+        acc_num, acc_seq = await self.get_account_num_seq(sender_acc_addr)
+        print("acc_num:{} acc_seq:{}".format(acc_num, acc_seq))
+
+        tx = Transaction(
+            privkey=sender_pk,
+            account_num=acc_num,
+            sequence=acc_seq,
+            gas=100000,
+            fee=100000 * MIN_GAS_PRICE,
+            chain_id = "injective-1",
+            sync_mode="block"
+        )
+        tx.add_cosmos_bank_msg_send(
+            recipient="inj1qy69k458ppmj45c3vqwcd6wvlcuvk23x0hsz58",  # maxim @ e2e-multinode
+            amount=100000000000000000,  # 0.1 INJ
+            denom="inj",
+        )
+
+        tx_json = tx.get_signed()
+
+        print('Signed Tx:', tx_json)
+        print('Sent Tx:', await self.post_tx(tx_json))
+    @staticmethod
+    async def get_account_num_seq(address: str) -> (int, int):
+        async with aiohttp.ClientSession() as session:
+            async with session.request(
+                'GET', 'http://localhost:10337/cosmos/auth/v1beta1/accounts/' + address,
+                headers={'Accept-Encoding': 'application/json'},
+            ) as response:
+                if response.status != 200:
+                    print(await response.text())
+                    raise ValueError("HTTP response status", response.status)
+
+                resp = json.loads(await response.text())
+                acc = resp['account']['base_account']
+                return acc['account_number'], acc['sequence']
+    
+    @ staticmethod
+    async def post_tx(tx_json: str):
+        async with aiohttp.ClientSession() as session:
+            async with session.request(
+                # 'POST', 'http://localhost:10337/cosmos/tx/v1beta1/txs', data=tx_json,
+                'POST', 'http://localhost:10337/txs', data=tx_json,
+                headers={'Content-Type': 'application/json'},
+            ) as response:
+                # print(response.text())
+                if response.status != 200:
+                    print(await response.text())
+                    raise ValueError("HTTP response status", response.status)
+
+                resp = json.loads(await response.text())
+                if 'code' in resp:
+                    print("Response:", resp)
+                    raise ValueError('sdk error %d: %s' %
+                                    (resp['code'], resp['raw_log']))
+
+                return resp['txhash']
+
+    async def test_deposit(self, quantity, denom='inj'):
+        self.private_key = seed_to_privkey(
+            "physical page glare junk return scale subject river token door mirror title")
+        sender_acc_addr = privkey_to_address(self.private_key)
+        print("Sender Account:", sender_acc_addr)
+        print("sender private key:{}".format(self.private_key))
+
+        acc_num, acc_seq = await self.get_account_num_seq(sender_acc_addr)
+        print("acc_num:{} acc_seq:{}".format(acc_num, acc_seq))
+
+        tx = Transaction(
+            privkey=self.private_key,
+            account_num=acc_num,
+            sequence=acc_seq,
+            gas=1000,
+            fee=1000 * MIN_GAS_PRICE,
+            chain_id = "injective-1",
+            sync_mode="block"
+        )
+
+        # subaccount: str, amount: int, denom: str = "inj"
+        tx.add_exchange_msg_deposit(self.acct_id, quantity, denom=denom)
+        
+        tx_json = tx.get_signed()
+
+        print('Signed Tx:', tx_json)
+        print('Sent Tx:', await self.post_tx(tx_json))
+    
+
+    async def test_cancel_order(self, order_hash):
+        self.private_key = seed_to_privkey(
+            "physical page glare junk return scale subject river token door mirror title")
+        sender_acc_addr = privkey_to_address(self.private_key)
+        print("Sender Account:", sender_acc_addr)
+        print("sender private key:{}".format(self.private_key))
+
+        acc_num, acc_seq = await self.get_account_num_seq(sender_acc_addr)
+        print("acc_num:{} acc_seq:{}".format(acc_num, acc_seq))
+
+        tx = Transaction(
+        privkey=self.private_key,
+        account_num=acc_num,
+        sequence=acc_seq,
+        gas=200000,
+        fee=200000 * MIN_GAS_PRICE,
+        chain_id = "injective-1",
+        sync_mode="block"
+        )
+
+        tx.add_cancel_spot_order(self.acct_id, self.spot_market_id, order_hash)
+        
+        tx_json = tx.get_signed()
+
+        print('Signed Tx:', tx_json)
+        print('Sent Tx:', await self.post_tx(tx_json))
+    
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    acct_id = "0xbdAEdEc95d563Fb05240d6e01821008454c24C36000000000000000000000000"
-    mm = MarketMaker(acct_id, 'INJUSDT')
-    # asyncio.get_event_loop().run_until_complete(mm.get_trading_request())
-    # asyncio.get_event_loop().run_until_complete(mm.get_tick_info())
-    # asyncio.get_event_loop().run_until_complete(mm.account_steam())
-    asyncio.get_event_loop().run_until_complete(mm.buy(0.1, 100))
+    acct_id = "0xbdaedec95d563fb05240d6e01821008454c24c36000000000000000000000000"
+    private_key = "edbde3a6da2165d23c7dbfa8a5159a1253cd1a39a210aadad43296aec1e37b48"
+
+    order_hash = "0xb4879e6c13f6645a6f5383b863f2631686a57d0ca4a9c9ddab0ea7b7dcd0a9d5"
+    mm = MarketMaker(acct_id, 'INJUSDT', private_key)
+
+    asyncio.get_event_loop().run_until_complete(mm.test_cancel_order(order_hash))
+    asyncio.get_event_loop().run_until_complete(mm.test_send_order())
+
