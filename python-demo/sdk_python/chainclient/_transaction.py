@@ -95,7 +95,7 @@ class Transaction:
         }
         self._msgs.append(msg)
 
-    def add_exchange_msg_batch_cancel_spot_order(self, subaccount_id_list: str, market_id_list: str, order_hash_list: str) -> None:
+    def add_exchange_msg_batch_cancel_spot_order(self, subaccount_id_list, market_id_list, order_hash_list) -> None:
         msg = {
             "type": "exchange/MsgBatchCancelSpotOrder",
             "value": {
@@ -136,7 +136,7 @@ class Transaction:
         }
         self._msgs.append(msg)
     
-    def add_exchange_msg_batch_create_spot_limit_orders(self, subaccount_id,  market_id_list, fee_recipient_list, price_list, quantity_list, order_type_list, trigger_price_list) -> None:
+    def add_exchange_msg_batch_create_spot_limit_orders(self, subaccount_id_list,  market_id_list, fee_recipient_list, price_list, quantity_list, order_type_list, trigger_price_list) -> None:
         msg = {
             "type": "exchange/MsgBatchCreateSpotLimitOrders",
             "value":{
@@ -145,11 +145,11 @@ class Transaction:
             }
         }
 
-        for i in range(len(subaccount_id)):
+        for i in range(len(subaccount_id_list)):
             msg["value"]["orders"].append({
                 'market_id': market_id_list[i],
                 'order_info': {
-                    'subaccount_id': subaccount_id[i],
+                    'subaccount_id': subaccount_id_list[i],
                     'fee_recipient': fee_recipient_list[i],
                     'price': price_list[i],
                     'quantity': quantity_list[i],

@@ -10,6 +10,6 @@
     "quote_position": 10000,
     "bid_place_threshold": 0.01,
     "ask_place_threshold": 0.01,
-    "cancel_order_wait_time": 60,
+    "cancel_order_wait_time": 10,
     "default_order_number": 5
 }

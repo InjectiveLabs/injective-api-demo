@@ -8,10 +8,18 @@ import typing
 
 import aiohttp
 import grpc
-from apscheduler.scheduler import Scheduler
-
+import apscheduler
+import apscheduler.schedulers
+from apscheduler.schedulers.background import BackgroundScheduler
 from constant import *
 from utils import price_string_to_float, quantity_string_to_float, quantity_float_to_string, price_float_to_string
+
+
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+SDK_PATH = os.path.join(_current_dir, "sdk_python")
+CONFIG_PATH = os.path.join(_current_dir, "config")
+
+sys.path.insert(0, SDK_PATH)
 
 from chainclient._wallet import seed_to_privkey as seed_to_privkey
 from chainclient._wallet import pubkey_to_address as pubkey_to_address
@@ -25,13 +33,6 @@ import exchange_api.injective_exchange_rpc_pb2_grpc as exchange_rpc_grpc
 import exchange_api.injective_exchange_rpc_pb2 as exchange_rpc_pb
 import exchange_api.injective_accounts_rpc_pb2_grpc as accounts_rpc_grpc
 import exchange_api.injective_accounts_rpc_pb2 as accounts_rpc_pb
-
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-SDK_PATH = os.path.join(_current_dir, "sdk_python")
-CONFIG_PATH = os.path.join(_current_dir, "config")
-
-sys.path.insert(0, SDK_PATH)
-
 
 class Trader(object):
     def __init__(self, account_id: str, spot_symbol: str, seed: str, base_denom, quote_denom):
@@ -118,7 +119,8 @@ class Trader(object):
 
     async def get_orders(self):
         pass
-
+    
+    # @asyncio.coroutine
     async def get_user_order_steam(self, order_callback):
         async with grpc.aio.insecure_channel('localhost:9910') as channel:
             spot_exchange_rpc = spot_exchange_rpc_grpc.InjectiveSpotExchangeRPCStub(
@@ -144,6 +146,7 @@ class Trader(object):
                 print("\n\033[1;34;40m API Response  \n")
                 print("\033[0;37;40m\n-- Order Update:", order)
 
+    # @asyncio.coroutine
     async def get_user_trade_steam(self, trade_callback):
         async with grpc.aio.insecure_channel('localhost:9910') as channel:
             spot_exchange_rpc = spot_exchange_rpc_grpc.InjectiveSpotExchangeRPCStub(
@@ -251,8 +254,7 @@ class Trader(object):
         print('Signed Tx:', tx_json)
         print('Sent Tx:', await self.post_tx(tx_json))
 
-    async def send_limit_order(self, base_denom: str, quote_denom: str, price: float, quantity: float,
-                               order_type_string: str, trigger_price: int, fee_recipient=None):
+    async def send_limit_order(self, price: float, quantity: float,order_type_string: str, trigger_price: int, fee_recipient=None):
         acc_num, acc_seq = await self.get_account_num_seq(self.sender_acc_addr)
         print("acc_num:{} acc_seq:{}".format(acc_num, acc_seq))
 
@@ -285,23 +287,133 @@ class Trader(object):
         print('Signed Tx:', tx_json)
         print('Sent Tx:', await self.post_tx(tx_json))
 
+    async def batch_cancel_order(self, order_hash_list):
+        acc_num, acc_seq = await self.get_account_num_seq(self.sender_acc_addr)
+        print("acc_num:{} acc_seq:{}".format(acc_num, acc_seq))
+
+        tx = Transaction(
+            privkey=self.private_key,
+            account_num=acc_num,
+            sequence=acc_seq,
+            gas=200000,
+            fee=200000 * MIN_GAS_PRICE,
+            chain_id="injective-1",
+            sync_mode="block"
+        )
+
+        order_hash_length = len(order_hash_list)
+        tx.add_cancel_spot_order([self.acct_id] * order_hash_length, [self.spot_market_id] * order_hash_length, order_hash_list)
+
+        tx_json = tx.get_signed()
+
+        print('Signed Tx:', tx_json)
+        print('Sent Tx:', await self.post_tx(tx_json))
+
+    async def batch_send_limit_order(self, price_list, quantity_list,
+                                     order_type_string_list, trigger_price_list, fee_recipient_list=None):
+        batch_size = len(price_list)
+
+        if fee_recipient_list is None:
+            fee_recipient_list = [self.sender_acc_addr] * batch_size
+
+        acc_num, acc_seq = await self.get_account_num_seq(self.sender_acc_addr)
+        print("acc_num:{} acc_seq:{}".format(acc_num, acc_seq))
+
+        tx = Transaction(
+            privkey=self.private_key,
+            account_num=acc_num,
+            sequence=acc_seq,
+            gas=200000,
+            fee=200000 * MIN_GAS_PRICE,
+            chain_id="injective-1",
+            sync_mode="block"
+        )
+
+        price_string_list = [price_float_to_string(
+            price, self.base_decimals, self.quote_decimals) for price in price_list]
+        quantity_string_list = [quantity_float_to_string(
+            quantity, self.base_decimals) for quantity in quantity_list]
+        trigger_price_string_list = [price_float_to_string(
+            trigger_price, self.base_decimals, self.quote_decimals) for trigger_price in trigger_price_list]
+        order_type_list = [ORDERTYPE_DICT[order_type_string] for order_type_string in order_type_string_list]
+
+        tx.add_exchange_msg_create_spot_limit_order(
+            [self.acct_id] * batch_size, [self.spot_market_id] * batch_size, \
+                fee_recipient_list, price_string_list, quantity_string_list, \
+                    order_type_list, trigger_price_string_list)
+
+        tx_json = tx.get_signed()
+
+        print('Signed Tx:', tx_json)
+        print('Sent Tx:', await self.post_tx(tx_json))
 
 class Strategy(object):
-    def __init__(self, trader: Trader, base_position, quote_position):
+    def __init__(self, trader: Trader, base_position, quote_position, bid_place_threshold, ask_place_threshold, order_number, cancel_order_wait_time):
         self.trader = trader
         self.active_order = {}
         self.base_position = base_position
         self.quote_position = quote_position
         self.frozen_base = 0
         self.frozen_quote = 0
-        asyncio.get_event_loop().run_until_complete(
-            self.trader.get_user_order_steam(self.on_order))
-        asyncio.get_event_loop().run_until_complete(
-            self.trader.get_user_trade_steam(self.on_trade))
+        self.bid_place_threshold = bid_place_threshold
+        self.ask_place_threshold = ask_place_threshold
+        self.order_number = order_number
+        self.sched = BackgroundScheduler()
+        self.sched.add_job(self.run, 'interval',
+                           seconds=cancel_order_wait_time)
+        self.sched.start()
+        
+        tasks = [
+            asyncio.Task(self.trader.get_user_order_steam(self.on_order)),
+            asyncio.Task(self.trader.get_user_trade_steam(self.on_trade)),]
+        asyncio.get_event_loop().run_until_complete(asyncio.wait(tasks))
 
-    def get_bid_ask_price(self):
-        order_book_request = asyncio.get_event_loop(
-        ).run_until_complete(self.trader.get_orderbook())
+        # asyncio.get_event_loop().run_until_complete(
+        #     self.trader.get_user_order_steam(self.on_order))
+
+    def run(self):
+        print("running...")
+        # @self.sched.interval_schedule(seconds=30)
+        if len(self.active_order) > 0:
+            self.trader.batch_cancel_order(list(self.active_order.keys()))
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        bid_price_1, ask_price_1 = loop.run_until_complete(self.get_bid_ask_price())
+        loop.close()
+        mid_price = (bid_price_1 + ask_price_1) /2 
+        bid_price_list = self.get_prices(
+            mid_price, self.order_number, self.bid_place_threshold, True)
+        ask_price_list = self.get_prices(
+            mid_price, self.order_number, self.ask_place_threshold, False)
+        
+        bid_order_quantity_list = [self.quote_position / self.order_number] * self.order_number
+        ask_order_quantity_list = [self.base_position / self.order_number] * self.order_number
+        order_type_list = ["BUY"] * self.order_number + ["SELL"] * self.order_number
+
+        self.batch_send_limit_order(
+            bid_price_list+ ask_price_list,
+            bid_order_quantity_list + ask_order_quantity_list,
+            order_type_list,
+            [0.0] * (2* self.order_number),
+        )
+        
+
+    @staticmethod
+    def get_prices(price, size, threshold, is_bid):
+        res = []
+        if is_bid is True:
+            for i in range(1, size+1):
+                res.append(price * (1 - i * threshold))
+        else:
+            for i in range(1, size+1):
+                res.append(price * (1 + i * threshold))
+        return res
+
+    async def get_bid_ask_price(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        order_book_request = loop.run_until_complete(self.trader.get_orderbook())
+        loop.close()
         bids = [buy for buy in order_book_request.order_book.buys]
         bids = sorted(bids, key=lambda x: x.price)
 
@@ -312,10 +424,10 @@ class Strategy(object):
             price_string_to_float(
                 asks[0].price, self.base_decimals, self.quote_decimals)
 
-    # def on_trade(self, trade):
-    #     import pdb
-    #     pdb.set_trace()
-    #     trade_data = trade.trade
+    def on_trade(self, trade):
+        # trade_data = trade.trade
+        import time
+        print("in trade time:{}".format(time.time()))
 
     def on_order(self, order):
         order_data = order.order
@@ -377,8 +489,13 @@ if __name__ == '__main__':
     quote_denom = demo_config['quote_denom']
     base_position = demo_config['base_position']
     quote_position = demo_config['quote_position']
+    default_order_number = demo_config['default_order_number']
+    bid_place_threshold = demo_config['bid_place_threshold']
+    ask_place_threshold = demo_config['ask_place_threshold']
+    cancel_order_wait_time = demo_config['cancel_order_wait_time']
 
     trader = Trader(subaccount_id, market, seed, base_denom, quote_denom)
-    market_maker = Strategy(trader, base_position, quote_position)
+    market_maker = Strategy(trader, base_position, quote_position,
+                            bid_place_threshold, ask_place_threshold, default_order_number, cancel_order_wait_time)
     # market_maker.get_bid_ask_price()
     market_maker.on_trade()
