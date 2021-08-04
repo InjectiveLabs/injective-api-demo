@@ -1,0 +1,15 @@
+{
+    "strategy_name": "MM Demo V0.0.0",
+    "subaccount_id" : "0xbdaedec95d563fb05240d6e01821008454c24c36000000000000000000000000",
+    "seed": "physical page glare junk return scale subject river token door mirror title",
+    "market" : "INJUSDT",
+    "base_denom" : "INJ",
+    "quote_denom" : "USDT",
+    "fee_recipient" : "inj1cml96vmptgw99syqrrz8az79xer2pcgp0a885r",
+    "base_position" : 100000,
+    "quote_position": 100000,
+    "bid_place_threshold": 0.01,
+    "ask_place_threshold": 0.01,
+    "cancel_order_wait_time": 60
+
+}

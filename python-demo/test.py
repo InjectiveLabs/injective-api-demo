@@ -21,7 +21,7 @@ import aiohttp
 import grpc
 
 from constant import *
-from utils import get_quantity_string, get_price_string
+from utils import price_float_to_string, quantity_float_to_string
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 SDK_PATH = os.path.join(_current_dir, "sdk_python")
 sys.path.insert(0, SDK_PATH)
@@ -199,8 +199,8 @@ class MarketMaker(object):
         print('Signed Tx:', tx_json)
         print('Sent Tx:', await self.post_tx(tx_json))
 
-    async def test_send_limit_order(self, base_denom: str, quote_denom: str, price: float, quantity: float, \
-        order_type_string: str, trigger_price: int, fee_recipient=None):
+    async def test_send_limit_order(self, base_denom: str, quote_denom: str, price: float, quantity: float,
+                                    order_type_string: str, trigger_price: int, fee_recipient=None):
         acc_num, acc_seq = await self.get_account_num_seq(self.sender_acc_addr)
         print("acc_num:{} acc_seq:{}".format(acc_num, acc_seq))
 
@@ -219,12 +219,12 @@ class MarketMaker(object):
 
         base_decimals = DECIMALS_DICT[base_denom]
         quote_decimals = DECIMALS_DICT[quote_denom]
-        price_string = get_price_string(price, base_decimals, quote_decimals)
-        quantity_string = get_quantity_string(quantity, base_decimals)
-        trigger_price_string = get_price_string(
+        price_string = price_float_to_string(price, base_decimals, quote_decimals)
+        quantity_string = quantity_float_to_string(quantity, base_decimals)
+        trigger_price_string = price_float_to_string(
             trigger_price, base_decimals, quote_decimals)
         order_type = ORDERTYPE_DICT[order_type_string]
-        
+
         tx.add_exchange_msg_create_spot_limit_order(
             self.acct_id, self.spot_market_id, fee_recipient, price_string, quantity_string, order_type, trigger_price_string)
 
@@ -237,7 +237,6 @@ class MarketMaker(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     acct_id = "0xbdaedec95d563fb05240d6e01821008454c24c36000000000000000000000000"
-    # private_key = "edbde3a6da2165d23c7dbfa8a5159a1253cd1a39a210aadad43296aec1e37b48"
     seed = "physical page glare junk return scale subject river token door mirror title"
     # order_hash = "0xb4879e6c13f6645a6f5383b863f2631686a57d0ca4a9c9ddab0ea7b7dcd0a9d5"
     mm = MarketMaker(acct_id, 'INJUSDT', seed)

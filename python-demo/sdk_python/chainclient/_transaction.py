@@ -8,7 +8,7 @@ import sha3
 
 from chainclient._wallet import DEFAULT_BECH32_HRP, privkey_to_address, privkey_to_pubkey
 from chainclient._typings import SyncMode
-from chainclient._typings import OrderType
+# from chainclient._typings import OrderType
 
 
 class Transaction:
@@ -105,7 +105,7 @@ class Transaction:
 # 	// trigger_price is the trigger price used by stop/take orders
 # 	TriggerPrice *github_com_cosmos_cosmos_sdk_types.Dec `protobuf:"bytes,4,opt,name=trigger_price,json=triggerPrice,proto3,customtype=github.com/cosmos/cosmos-sdk/types.Dec" json:"trigger_price,omitempty"`
 # }
-    def add_exchange_msg_create_spot_limit_order(self, subaccount_id: str,  market_id: str, fee_recipient: str, price: int, quantity: int, order_type: OrderType, trigger_price: int) -> None:
+    def add_exchange_msg_create_spot_limit_order(self, subaccount_id: str,  market_id: str, fee_recipient: str, price: int, quantity: int, order_type, trigger_price: int) -> None:
         msg = {
             "type": "exchange/MsgCreateSpotLimitOrder",
             "value": {
