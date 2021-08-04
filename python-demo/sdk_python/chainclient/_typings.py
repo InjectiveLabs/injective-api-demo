@@ -7,7 +7,6 @@ from typing import Literal, TypedDict
 # Cosmos REST API.
 SyncMode = Literal["sync", "async", "block"]
 
-OrderType = Literal["UNSPECIFIED", "BUY", "SELL","STOP_BUY","STOP_SELL","TAKE_BUY","TAKE_SELL"]
 
 class Wallet(TypedDict):
     seed: str

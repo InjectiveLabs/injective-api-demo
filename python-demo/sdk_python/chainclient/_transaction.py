@@ -125,7 +125,6 @@ class Transaction:
         }
         self._msgs.append(msg)
 
-    # def add_exchange_msg_
 
     def get_signed(self) -> str:
         pubkey = privkey_to_pubkey(self._privkey)

@@ -1,3 +1,15 @@
+from chainclient._wallet import seed_to_privkey as seed_to_privkey
+from chainclient._wallet import pubkey_to_address as pubkey_to_address
+from chainclient._wallet import privkey_to_pubkey as privkey_to_pubkey
+from chainclient._wallet import privkey_to_address as privkey_to_address
+from chainclient._wallet import generate_wallet as generate_wallet
+from chainclient._transaction import Transaction as Transaction
+import exchange_api.injective_spot_exchange_rpc_pb2_grpc as spot_exchange_rpc_grpc
+import exchange_api.injective_spot_exchange_rpc_pb2 as spot_exchange_rpc_pb
+import exchange_api.injective_exchange_rpc_pb2_grpc as exchange_rpc_grpc
+import exchange_api.injective_exchange_rpc_pb2 as exchange_rpc_pb
+import exchange_api.injective_accounts_rpc_pb2_grpc as accounts_rpc_grpc
+import exchange_api.injective_accounts_rpc_pb2 as accounts_rpc_pb
 import asyncio
 import json
 import logging
@@ -9,25 +21,10 @@ import aiohttp
 import grpc
 
 from constant import *
-
+from utils import get_quantity_string, get_price_string
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 SDK_PATH = os.path.join(_current_dir, "sdk_python")
 sys.path.insert(0, SDK_PATH)
-
-
-
-import exchange_api.injective_accounts_rpc_pb2 as accounts_rpc_pb
-import exchange_api.injective_accounts_rpc_pb2_grpc as accounts_rpc_grpc
-import exchange_api.injective_exchange_rpc_pb2 as exchange_rpc_pb
-import exchange_api.injective_exchange_rpc_pb2_grpc as exchange_rpc_grpc
-import exchange_api.injective_spot_exchange_rpc_pb2 as spot_exchange_rpc_pb
-import exchange_api.injective_spot_exchange_rpc_pb2_grpc as spot_exchange_rpc_grpc
-from chainclient._transaction import Transaction as Transaction
-from chainclient._wallet import generate_wallet as generate_wallet
-from chainclient._wallet import privkey_to_address as privkey_to_address
-from chainclient._wallet import privkey_to_pubkey as privkey_to_pubkey
-from chainclient._wallet import pubkey_to_address as pubkey_to_address
-from chainclient._wallet import seed_to_privkey as seed_to_privkey
 
 
 class MarketMaker(object):
@@ -51,7 +48,6 @@ class MarketMaker(object):
         self.sender_acc_addr = privkey_to_address(self.private_key)
         print("Sender Account:", self.sender_acc_addr)
         print("sender private key:{}".format(self.private_key))
-
 
     async def get_trading_request(self) -> spot_exchange_rpc_pb.TradesResponse:
         async with grpc.aio.insecure_channel('localhost:9910') as channel:
@@ -109,7 +105,7 @@ class MarketMaker(object):
             sequence=acc_seq,
             gas=100000,
             fee=100000 * MIN_GAS_PRICE,
-            chain_id = "injective-1",
+            chain_id="injective-1",
             sync_mode="block"
         )
         tx.add_cosmos_bank_msg_send(
@@ -122,7 +118,7 @@ class MarketMaker(object):
 
         print('Signed Tx:', tx_json)
         print('Sent Tx:', await self.post_tx(tx_json))
-    
+
     @staticmethod
     async def get_account_num_seq(address: str) -> typing.Tuple[int, int]:
         async with aiohttp.ClientSession() as session:
@@ -137,7 +133,7 @@ class MarketMaker(object):
                 resp = json.loads(await response.text())
                 acc = resp['account']['base_account']
                 return acc['account_number'], acc['sequence']
-    
+
     @ staticmethod
     async def post_tx(tx_json: str):
         async with aiohttp.ClientSession() as session:
@@ -155,9 +151,10 @@ class MarketMaker(object):
                 if 'code' in resp:
                     print("Response:", resp)
                     raise ValueError('sdk error %d: %s' %
-                                    (resp['code'], resp['raw_log']))
+                                     (resp['code'], resp['raw_log']))
 
-                return resp['txhash']
+                # return resp['txhash']
+                return resp
 
     async def test_deposit(self, quantity, denom='inj'):
         acc_num, acc_seq = await self.get_account_num_seq(self.sender_acc_addr)
@@ -169,41 +166,19 @@ class MarketMaker(object):
             sequence=acc_seq,
             gas=1000,
             fee=1000 * MIN_GAS_PRICE,
-            chain_id = "injective-1",
+            chain_id="injective-1",
             sync_mode="block"
         )
 
         tx.add_exchange_msg_deposit(self.acct_id, quantity, denom=denom)
-        
+
         tx_json = tx.get_signed()
 
         print('Signed Tx:', tx_json)
         print('Sent Tx:', await self.post_tx(tx_json))
-    
 
     async def test_cancel_order(self, order_hash):
-        
-        acc_num, acc_seq = await self.get_account_num_seq(self.sender_acc_addr)
-        print("acc_num:{} acc_seq:{}".format(acc_num, acc_seq))
 
-        tx = Transaction(
-        privkey=self.private_key,
-        account_num=acc_num,
-        sequence=acc_seq,
-        gas=200000,
-        fee=200000 * MIN_GAS_PRICE,
-        chain_id = "injective-1",
-        sync_mode="block"
-        )
-
-        tx.add_cancel_spot_order(self.acct_id, self.spot_market_id, order_hash)
-        
-        tx_json = tx.get_signed()
-
-        print('Signed Tx:', tx_json)
-        print('Sent Tx:', await self.post_tx(tx_json))
-    
-    async def test_send_limit_order(self, price, quantity, order_type, trigger_price, fee_recipient = None):
         acc_num, acc_seq = await self.get_account_num_seq(self.sender_acc_addr)
         print("acc_num:{} acc_seq:{}".format(acc_num, acc_seq))
 
@@ -216,14 +191,48 @@ class MarketMaker(object):
             chain_id="injective-1",
             sync_mode="block"
         )
-        if fee_recipient == None:
-            fee_recipient = self.sender_acc_addr
-        tx.add_exchange_msg_create_spot_limit_order(self.acct_id, self.spot_market_id, fee_recipient, price, quantity, order_type, trigger_price)
+
+        tx.add_cancel_spot_order(self.acct_id, self.spot_market_id, order_hash)
 
         tx_json = tx.get_signed()
 
         print('Signed Tx:', tx_json)
         print('Sent Tx:', await self.post_tx(tx_json))
+
+    async def test_send_limit_order(self, base_denom: str, quote_denom: str, price: float, quantity: float, \
+        order_type_string: str, trigger_price: int, fee_recipient=None):
+        acc_num, acc_seq = await self.get_account_num_seq(self.sender_acc_addr)
+        print("acc_num:{} acc_seq:{}".format(acc_num, acc_seq))
+
+        tx = Transaction(
+            privkey=self.private_key,
+            account_num=acc_num,
+            sequence=acc_seq,
+            gas=200000,
+            fee=200000 * MIN_GAS_PRICE,
+            chain_id="injective-1",
+            sync_mode="block"
+        )
+
+        if fee_recipient == None:
+            fee_recipient = self.sender_acc_addr
+
+        base_decimals = DECIMALS_DICT[base_denom]
+        quote_decimals = DECIMALS_DICT[quote_denom]
+        price_string = get_price_string(price, base_decimals, quote_decimals)
+        quantity_string = get_quantity_string(quantity, base_decimals)
+        trigger_price_string = get_price_string(
+            trigger_price, base_decimals, quote_decimals)
+        order_type = ORDERTYPE_DICT[order_type_string]
+        
+        tx.add_exchange_msg_create_spot_limit_order(
+            self.acct_id, self.spot_market_id, fee_recipient, price_string, quantity_string, order_type, trigger_price_string)
+
+        tx_json = tx.get_signed()
+
+        print('Signed Tx:', tx_json)
+        print('Sent Tx:', await self.post_tx(tx_json))
+
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
@@ -232,8 +241,7 @@ if __name__ == '__main__':
     seed = "physical page glare junk return scale subject river token door mirror title"
     # order_hash = "0xb4879e6c13f6645a6f5383b863f2631686a57d0ca4a9c9ddab0ea7b7dcd0a9d5"
     mm = MarketMaker(acct_id, 'INJUSDT', seed)
-    # asyncio.get_event_loop().run_until_complete(mm.test_send_order())
 
-    # asyncio.get_event_loop().run_until_complete(mm.test_cancel_order(order_hash))
+    # sell inj/usdt @ price 66, quantity 77.77
     asyncio.get_event_loop().run_until_complete(
-        mm.test_send_limit_order("0.000000005000000000", "1222000000000000000000.000000000000000000", 2, "0.000000000000000000", "inj1cml96vmptgw99syqrrz8az79xer2pcgp0a885r"))
+        mm.test_send_limit_order("INJ", "USDT", 66.66, 77.77, "SELL", 0, "inj1cml96vmptgw99syqrrz8az79xer2pcgp0a885r"))
