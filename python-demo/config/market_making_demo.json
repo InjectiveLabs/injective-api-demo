@@ -6,10 +6,10 @@
     "base_denom" : "INJ",
     "quote_denom" : "USDT",
     "fee_recipient" : "inj1cml96vmptgw99syqrrz8az79xer2pcgp0a885r",
-    "base_position" : 100000,
-    "quote_position": 100000,
+    "base_position" : 10000,
+    "quote_position": 10000,
     "bid_place_threshold": 0.01,
     "ask_place_threshold": 0.01,
-    "cancel_order_wait_time": 60
-
+    "cancel_order_wait_time": 60,
+    "default_order_number": 5
 }

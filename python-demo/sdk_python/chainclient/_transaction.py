@@ -95,17 +95,28 @@ class Transaction:
         }
         self._msgs.append(msg)
 
-#     type SpotOrder struct {
-# 	// market_id represents the unique ID of the market
-# 	MarketId string `protobuf:"bytes,1,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
-# 	// order_info contains the information of the order
-# 	OrderInfo OrderInfo `protobuf:"bytes,2,opt,name=order_info,json=orderInfo,proto3" json:"order_info"`
-# 	// order types
-# 	OrderType OrderType `protobuf:"varint,3,opt,name=order_type,json=orderType,proto3,enum=injective.exchange.v1beta1.OrderType" json:"order_type,omitempty"`
-# 	// trigger_price is the trigger price used by stop/take orders
-# 	TriggerPrice *github_com_cosmos_cosmos_sdk_types.Dec `protobuf:"bytes,4,opt,name=trigger_price,json=triggerPrice,proto3,customtype=github.com/cosmos/cosmos-sdk/types.Dec" json:"trigger_price,omitempty"`
-# }
-    def add_exchange_msg_create_spot_limit_order(self, subaccount_id: str,  market_id: str, fee_recipient: str, price: int, quantity: int, order_type, trigger_price: int) -> None:
+    def add_exchange_msg_batch_cancel_spot_order(self, subaccount_id_list: str, market_id_list: str, order_hash_list: str) -> None:
+        msg = {
+            "type": "exchange/MsgBatchCancelSpotOrder",
+            "value": {
+                "sender": privkey_to_address(self._privkey, hrp=self._hrp),
+                "data": []
+            },
+        }
+        
+        for i in range(len(subaccount_id_list)):
+            msg["value"]["data"].append(
+                {
+                    "subaccount_id": subaccount_id_list[i],
+                    "market_id": market_id_list[i],
+                    "order_hash": order_hash_list[i],
+                }
+            )
+        
+        self._msgs.append(msg)
+
+
+    def add_exchange_msg_create_spot_limit_order(self, subaccount_id: str,  market_id: str, fee_recipient: str, price, quantity, order_type, trigger_price) -> None:
         msg = {
             "type": "exchange/MsgCreateSpotLimitOrder",
             "value": {
@@ -115,8 +126,8 @@ class Transaction:
                     'order_info': {
                         'subaccount_id': subaccount_id,
                         'fee_recipient': fee_recipient,
-                        'price': str(price),
-                        'quantity': str(quantity),
+                        'price': price,
+                        'quantity': quantity,
                     },
                     'order_type': order_type,
                     "trigger_price": trigger_price,
@@ -124,6 +135,31 @@ class Transaction:
             }
         }
         self._msgs.append(msg)
+    
+    def add_exchange_msg_batch_create_spot_limit_orders(self, subaccount_id,  market_id_list, fee_recipient_list, price_list, quantity_list, order_type_list, trigger_price_list) -> None:
+        msg = {
+            "type": "exchange/MsgBatchCreateSpotLimitOrders",
+            "value":{
+                "sender": privkey_to_address(self._privkey, hrp=self._hrp),
+                "orders":[]
+            }
+        }
+
+        for i in range(len(subaccount_id)):
+            msg["value"]["orders"].append({
+                'market_id': market_id_list[i],
+                'order_info': {
+                    'subaccount_id': subaccount_id[i],
+                    'fee_recipient': fee_recipient_list[i],
+                    'price': price_list[i],
+                    'quantity': quantity_list[i],
+                },
+                'order_type': order_type_list[i],
+                "trigger_price": trigger_price_list[i],
+                }
+            )
+        self._msgs.append(msg)
+
 
 
     def get_signed(self) -> str:
