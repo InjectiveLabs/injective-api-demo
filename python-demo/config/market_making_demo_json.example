@@ -1,0 +1,15 @@
+{
+    "strategy_name": "MM Demo V0.0.0",
+    "subaccount_id" : "change value here",
+    "seed": "change value here",
+    "market" : "INJUSDT",
+    "base_denom" : "INJ",
+    "quote_denom" : "USDT",
+    "fee_recipient" : "inj1cml96vmptgw99syqrrz8az79xer2pcgp0a885r, you can change value here",
+    "base_position" : 10000,
+    "quote_position": 10000,
+    "bid_place_threshold": 0.01,
+    "ask_place_threshold": 0.01,
+    "cancel_order_wait_time": 10,
+    "default_order_number": 5
+}

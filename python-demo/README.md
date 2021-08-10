@@ -99,17 +99,23 @@ Similar to
 
 > MarketRequest
 
-###
-
-
-
 
 
 ## How to run demo
 
+Modify environment value in `market_making_demo.json`
+
+```bash
+python pure_market_making_demo.py
+```
+
+## What does demo do
+
+Demo with default json setting is a simple **INJUSDT** pure market-making strategy, which places several orders at the price of 1% above and below the `mid_price`(`mid_price = (bid_price_1 + ask_price_1)/2`), and then cancel all orders and replace them according to new `mid_price` every 10s.
 
 
 
+So far, implemented trasanction-related functions include `send_limit_order`, `cancel_order`, `semd_limit_order_in_batch`, `cancel_order_in_batch`.You can add more features in `sdk_python/chain_client/_transactions.py` according to the source code of repo`injective-core`. And we will add more features and update `sdk-python` once it has be done.
 
 ## Suggestions
 

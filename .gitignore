@@ -1,3 +1,5 @@
+
+*.json
 # injective folder
 */var/data/injective-888/
 
