@@ -11,6 +11,7 @@ import grpc
 import apscheduler
 import apscheduler.schedulers
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from constant import *
 from utils import price_string_to_float, quantity_string_to_float, quantity_float_to_string, price_float_to_string
 
@@ -295,14 +296,15 @@ class Trader(object):
             privkey=self.private_key,
             account_num=acc_num,
             sequence=acc_seq,
-            gas=200000,
-            fee=200000 * MIN_GAS_PRICE,
+            gas=900000,
+            fee=900000 * MIN_GAS_PRICE,
             chain_id="injective-1",
             sync_mode="block"
         )
 
         order_hash_length = len(order_hash_list)
-        tx.add_cancel_spot_order([self.acct_id] * order_hash_length, [self.spot_market_id] * order_hash_length, order_hash_list)
+        tx.add_exchange_msg_batch_cancel_spot_order(
+            [self.acct_id] * order_hash_length, [self.spot_market_id] * order_hash_length, order_hash_list)
 
         tx_json = tx.get_signed()
 
@@ -323,8 +325,8 @@ class Trader(object):
             privkey=self.private_key,
             account_num=acc_num,
             sequence=acc_seq,
-            gas=200000,
-            fee=200000 * MIN_GAS_PRICE,
+            gas=400000,
+            fee=400000 * MIN_GAS_PRICE,
             chain_id="injective-1",
             sync_mode="block"
         )
@@ -337,7 +339,7 @@ class Trader(object):
             trigger_price, self.base_decimals, self.quote_decimals) for trigger_price in trigger_price_list]
         order_type_list = [ORDERTYPE_DICT[order_type_string] for order_type_string in order_type_string_list]
 
-        tx.add_exchange_msg_create_spot_limit_order(
+        tx.add_exchange_msg_batch_create_spot_limit_orders(
             [self.acct_id] * batch_size, [self.spot_market_id] * batch_size, \
                 fee_recipient_list, price_string_list, quantity_string_list, \
                     order_type_list, trigger_price_string_list)
@@ -358,7 +360,7 @@ class Strategy(object):
         self.bid_place_threshold = bid_place_threshold
         self.ask_place_threshold = ask_place_threshold
         self.order_number = order_number
-        self.sched = BackgroundScheduler()
+        self.sched = AsyncIOScheduler()
         self.sched.add_job(self.run, 'interval',
                            seconds=cancel_order_wait_time)
         self.sched.start()
@@ -368,19 +370,14 @@ class Strategy(object):
             asyncio.Task(self.trader.get_user_trade_steam(self.on_trade)),]
         asyncio.get_event_loop().run_until_complete(asyncio.wait(tasks))
 
-        # asyncio.get_event_loop().run_until_complete(
-        #     self.trader.get_user_order_steam(self.on_order))
 
-    def run(self):
+    async def run(self):
         print("running...")
-        # @self.sched.interval_schedule(seconds=30)
         if len(self.active_order) > 0:
-            self.trader.batch_cancel_order(list(self.active_order.keys()))
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        bid_price_1, ask_price_1 = loop.run_until_complete(self.get_bid_ask_price())
-        loop.close()
+            await self.trader.batch_cancel_order(list(self.active_order.keys()))
+        bid_price_1, ask_price_1 = await self.get_bid_ask_price()
         mid_price = (bid_price_1 + ask_price_1) /2 
+        print("mid_price is {}".format(mid_price))
         bid_price_list = self.get_prices(
             mid_price, self.order_number, self.bid_place_threshold, True)
         ask_price_list = self.get_prices(
@@ -390,7 +387,7 @@ class Strategy(object):
         ask_order_quantity_list = [self.base_position / self.order_number] * self.order_number
         order_type_list = ["BUY"] * self.order_number + ["SELL"] * self.order_number
 
-        self.batch_send_limit_order(
+        await self.trader.batch_send_limit_order(
             bid_price_list+ ask_price_list,
             bid_order_quantity_list + ask_order_quantity_list,
             order_type_list,
@@ -403,31 +400,38 @@ class Strategy(object):
         res = []
         if is_bid is True:
             for i in range(1, size+1):
-                res.append(price * (1 - i * threshold))
+                res.append(round(price * (1 - i * threshold), 3))
         else:
             for i in range(1, size+1):
-                res.append(price * (1 + i * threshold))
+                res.append(round(price * (1 + i * threshold), 3))
         return res
 
     async def get_bid_ask_price(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        order_book_request = loop.run_until_complete(self.trader.get_orderbook())
-        loop.close()
-        bids = [buy for buy in order_book_request.order_book.buys]
+        order_book_request = await self.trader.get_orderbook()
+        bids = [buy for buy in order_book_request.orderbook.buys]
         bids = sorted(bids, key=lambda x: x.price)
 
-        asks = [sell for sell in order_book_request.order_book.sells]
+        asks = [sell for sell in order_book_request.orderbook.sells]
         asks = sorted(asks, key=lambda x: x.price)
 
-        return price_string_to_float(bids[0].price, self.base_decimals, self.quote_decimals), \
+        return price_string_to_float(bids[0].price, self.trader.base_decimals, self.trader.quote_decimals), \
             price_string_to_float(
-                asks[0].price, self.base_decimals, self.quote_decimals)
+                asks[0].price, self.trader.base_decimals, self.trader.quote_decimals)
 
     def on_trade(self, trade):
-        # trade_data = trade.trade
-        import time
-        print("in trade time:{}".format(time.time()))
+        trade_data = trade.trade
+        if trade_data.trade_direction == "buy":
+            trade_quantity = quantity_string_to_float(
+                trade_data.unfilled_quantity, self.trader.base_decimals)
+            self.frozen_quote -= trade_quantity
+            self.quote_position -= trade_quantity
+            self.base_position += trade_quantity
+        else:
+            trade_quantity = quantity_string_to_float(
+                trade_data.unfilled_quantity, self.trader.base_decimals)
+            self.frozen_base -= trade_quantity
+            self.base_position -= trade_quantity
+            self.quote_position += trade_quantity
 
     def on_order(self, order):
         order_data = order.order
@@ -497,5 +501,3 @@ if __name__ == '__main__':
     trader = Trader(subaccount_id, market, seed, base_denom, quote_denom)
     market_maker = Strategy(trader, base_position, quote_position,
                             bid_place_threshold, ask_place_threshold, default_order_number, cancel_order_wait_time)
-    # market_maker.get_bid_ask_price()
-    market_maker.on_trade()

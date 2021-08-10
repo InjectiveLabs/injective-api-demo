@@ -97,7 +97,8 @@ class Transaction:
 
     def add_exchange_msg_batch_cancel_spot_order(self, subaccount_id_list, market_id_list, order_hash_list) -> None:
         msg = {
-            "type": "exchange/MsgBatchCancelSpotOrder",
+            #FIXME: ATTENTION, Order`s`
+            "type": "exchange/MsgBatchCancelSpotOrders",
             "value": {
                 "sender": privkey_to_address(self._privkey, hrp=self._hrp),
                 "data": []
