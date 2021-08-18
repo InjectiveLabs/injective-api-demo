@@ -25,13 +25,12 @@ $ ./injective-trading-bot.sh
 ```
 
 ## How it works
-This market making bot based on [Avellaneda & Stoikov’s market-making strategy](https://hummingbot.io/blog/2021-04-avellaneda-stoikov-market-making-strategy).
 
-It will place orders on both buy and sell side based on your inventory conditions.
+Based on some market fair value generation, this demo places orders on both buy and sell side based on your inventory conditions.
 
 The reference price is from *Binance* partial book data.
 
-You can find out all the detail from /path/to/injective-api-demo/go/trading.
+You can find out all the detail from /path/to/injective-api-demo/go-demo/trading.
 
 The main loop logic is in singleExchangeMM.go
 
