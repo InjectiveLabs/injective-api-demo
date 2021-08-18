@@ -1,1 +1,0 @@
-go run cmd/injective-trading-bot/main.go cmd/injective-trading-bot/util.go cmd/injective-trading-bot/options.go cmd/injective-trading-bot/metrics.go cmd/injective-trading-bot/trading.go cmd/injective-trading-bot/keys.go start
