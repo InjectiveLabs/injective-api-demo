@@ -4,22 +4,19 @@ import grpc
 import os
 import sys
 
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-SDK_PATH = os.path.join(_current_dir, "sdk_python")
-sys.path.insert(0, SDK_PATH)
 
-import exchange_api.injective_accounts_rpc_pb2 as accounts_rpc_pb
-import exchange_api.injective_accounts_rpc_pb2_grpc as accounts_rpc_grpc
-import exchange_api.injective_derivative_exchange_rpc_pb2 as derivative_exchange_rpc_pb
-import exchange_api.injective_derivative_exchange_rpc_pb2_grpc as derivative_exchange_rpc_grpc
-import exchange_api.injective_exchange_rpc_pb2 as exchange_rpc_pb
-import exchange_api.injective_exchange_rpc_pb2_grpc as exchange_rpc_grpc
-import exchange_api.injective_insurance_rpc_pb2 as insurance_rpc_pb
-import exchange_api.injective_insurance_rpc_pb2_grpc as insurance_rpc_grpc
-import exchange_api.injective_oracle_rpc_pb2 as oracle_rpc_pb
-import exchange_api.injective_oracle_rpc_pb2_grpc as oracle_rpc_grpc
-import exchange_api.injective_spot_exchange_rpc_pb2 as spot_exchange_rpc_pb
-import exchange_api.injective_spot_exchange_rpc_pb2_grpc as spot_exchange_rpc_grpc
+import injective.exchange_api.injective_accounts_rpc_pb2 as accounts_rpc_pb
+import injective.exchange_api.injective_accounts_rpc_pb2_grpc as accounts_rpc_grpc
+import injective.exchange_api.injective_derivative_exchange_rpc_pb2 as derivative_exchange_rpc_pb
+import injective.exchange_api.injective_derivative_exchange_rpc_pb2_grpc as derivative_exchange_rpc_grpc
+import injective.exchange_api.injective_exchange_rpc_pb2 as exchange_rpc_pb
+import injective.exchange_api.injective_exchange_rpc_pb2_grpc as exchange_rpc_grpc
+import injective.exchange_api.injective_insurance_rpc_pb2 as insurance_rpc_pb
+import injective.exchange_api.injective_insurance_rpc_pb2_grpc as insurance_rpc_grpc
+import injective.exchange_api.injective_oracle_rpc_pb2 as oracle_rpc_pb
+import injective.exchange_api.injective_oracle_rpc_pb2_grpc as oracle_rpc_grpc
+import injective.exchange_api.injective_spot_exchange_rpc_pb2 as spot_exchange_rpc_pb
+import injective.exchange_api.injective_spot_exchange_rpc_pb2_grpc as spot_exchange_rpc_grpc
 
 
 async def main() -> None:
