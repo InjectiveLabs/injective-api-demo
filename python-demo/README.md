@@ -10,6 +10,8 @@
 
 python 3.7+
 
+pyinjective v0.4.2
+
 ### Install injective python_sdk package
 
 ```bash
@@ -18,32 +20,17 @@ pip install injective-py
 
 You could find more infomation about injective-py in https://pypi.org/project/injective-py/ or read source code from https://github.com/InjectiveLabs/sdk-python
 
-## How to run example in sdk_python
-
-```bash
-cd /path/to/injective_py
-python /path/to/exchange_api_example/exchange.py # python 3.7+
-```
-
-And you can see the avaliable markets from terminal, and the hexadecimal string is the **market id** which may be useful for connecting to market and send requests.
-
-![example](README.assets/example.png)
-
-Then, you can send an order in your dex front-end(default local address is localhost:3000, testnet is testnet-sentry0.injective.network)
-
 ## How to run demo
 
-Modify environment value in `market_making_demo.json`
+Modify environment value in `./config/market_making_setting.json`, then
 
 ```bash
-python pure_market_making_demo.py
+python start.py
 ```
 
 ## What does demo do
 
-Demo with default json setting is a simple **INJUSDT** pure market-making strategy, which places several orders at the price of 1% above and below the `mid_price`(`mid_price = (bid_price_1 + ask_price_1)/2`), and then cancel all orders and replace them according to new `mid_price` every 10s.
-
-So far, implemented trasanction-related functions include `send_limit_order`, `cancel_order`, `semd_limit_order_in_batch`, `cancel_order_in_batch`.You can add more features in `sdk_python/chain_client/_transactions.py` according to the source code of repo `injective-core`. And we will add more features and update `sdk-python` once it has be done.
+Demo with default json setting is a simple **perpetual BTCUSDT** pure market-making strategy, which places one bid order and one ask order around midprice（`midprice = (bid_price_1+ask_price_1) / 2`), `placing_spread/mid_price` is fixed according to the value in configuration. And it will cancel and quote bid/ask order every `interval(default is 20)` seconds.
 
 ## Decimal
 
