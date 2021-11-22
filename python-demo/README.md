@@ -13,8 +13,10 @@ pyinjective v0.5.1+
 ```bash
 pip install injective-py
 ```
+If you had problems while installing the injective python_sdk package, you should install the dependencies in
+https://ofek.dev/coincurve/
 
-You could find more infomation about injective-py in https://pypi.org/project/injective-py/
+You could find more information about injective-py in https://pypi.org/project/injective-py/
 
 If the latest package is not uploaded to pypi, you use the following commands to update `injective-py`
 
