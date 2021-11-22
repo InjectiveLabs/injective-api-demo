@@ -21,7 +21,7 @@ Then
 ```bash
 $ cd /path/to/injective-api-demo/go
 $ make install
-$ ./injective-trading-bot.sh
+$ ./go-bot-demo.sh
 ```
 
 ## How it works

@@ -183,31 +183,9 @@ func initStatsdOptions(
 
 func initTradingOptions(
 	cmd *cli.Cmd,
-	sendAlert **bool,
-	historySec **int,
 	injSymbols **[]string,
-	sendSelfOrder **bool,
-	bufferTicks **int,
-	minPnlPct **int,
-	maxDDPct **int,
-	maxPositionPct **int,
-	maxOrderValue **int,
-	spotSideCount **int,
+	maxOrderValue **[]float64,
 ) {
-	*sendAlert = cmd.Bool(cli.BoolOpt{
-		Name:   "send-alert",
-		Desc:   "Send alert to discord channels",
-		EnvVar: "SEND_ALERT_BOOL",
-		Value:  false,
-	})
-
-	*historySec = cmd.Int(cli.IntOpt{
-		Name:   "historical-sec",
-		Desc:   "backward seconds for historical data",
-		EnvVar: "HISTORICAL_SECONDS",
-		Value:  600,
-	})
-
 	*injSymbols = cmd.Strings(cli.StringsOpt{
 		Name:   "injective-symbols",
 		Desc:   "injective market for strategy",
@@ -215,52 +193,10 @@ func initTradingOptions(
 		Value:  []string{},
 	})
 
-	*sendSelfOrder = cmd.Bool(cli.BoolOpt{
-		Name:   "send-self-fill-order",
-		Desc:   "for testing strategy logics",
-		EnvVar: "SEND_SELF_FILL_ORDER_FOR_TEST",
-		Value:  false,
-	})
-
-	*bufferTicks = cmd.Int(cli.IntOpt{
-		Name:   "buffer-ticks",
-		Desc:   "sensitivity for orderbook price changed",
-		EnvVar: "BUFFER_TICKS_FOR_UPDATE_ORDER",
-		Value:  10,
-	})
-
-	*minPnlPct = cmd.Int(cli.IntOpt{
-		Name:   "min-pnl-pct",
-		Desc:   "pct for min pcl control",
-		EnvVar: "MIN_PNL_PCT",
-		Value:  10,
-	})
-
-	*maxDDPct = cmd.Int(cli.IntOpt{
-		Name:   "max-dd-pct",
-		Desc:   "pct for max draw down control",
-		EnvVar: "MAX_DRAW_DOWN_PCT",
-		Value:  10,
-	})
-
-	*maxPositionPct = cmd.Int(cli.IntOpt{
-		Name:   "max-postition-pct",
-		Desc:   "pct for max position control",
-		EnvVar: "MAX_POSITION_PCT",
-		Value:  10,
-	})
-
-	*maxOrderValue = cmd.Int(cli.IntOpt{
+	*maxOrderValue = cmd.Floats64(cli.Floats64Opt{
 		Name:   "max-order-value",
 		Desc:   "max order value in usd",
 		EnvVar: "MAX_ORDER_VALUE_USD",
-		Value:  90,
-	})
-
-	*spotSideCount = cmd.Int(cli.IntOpt{
-		Name:   "spot-book-side-count",
-		Desc:   "how many order for each side",
-		EnvVar: "SPOT_BOOK_SIDE_ORDER_COUNT",
-		Value:  8,
+		Value:  []float64{},
 	})
 }

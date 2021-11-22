@@ -2,17 +2,16 @@ package trading
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
 	cosmtypes "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	"github.com/nickname32/discordhook"
 	"github.com/pkg/errors"
-	log "github.com/xlab/suplog"
+	"github.com/shopspring/decimal"
+	log "github.com/sirupsen/logrus"
 
 	chainclient "github.com/InjectiveLabs/sdk-go/chain/client"
 	chaintypes "github.com/InjectiveLabs/sdk-go/chain/exchange/types"
@@ -23,7 +22,7 @@ import (
 	oraclePB "github.com/InjectiveLabs/sdk-go/exchange/oracle_rpc/pb"
 	spotExchangePB "github.com/InjectiveLabs/sdk-go/exchange/spot_exchange_rpc/pb"
 
-	"github.com/InjectiveLabs/injective-trading-bot/metrics"
+	"go-bot-demo/metrics"
 )
 
 const (
@@ -33,7 +32,36 @@ const (
 
 // sync other exchanges' market data
 type dataCenter struct {
-	UpdateInterval time.Duration
+	UpdateInterval       time.Duration
+	InjectiveSpotAccount InjectiveSpotAccountBranch
+	InjectivePositions   InjectivePositionsBranch
+	InjectiveQuoteLen    int
+	InjectiveQuoteAssets []InjectiveQuoteAssetsBranch
+}
+
+type InjectiveQuoteAssetsBranch struct {
+	Asset              string
+	Denom              string
+	QuoteDenomDecimals int
+	AvailableBalance   decimal.Decimal
+	TotalBalance       decimal.Decimal
+	mux                sync.RWMutex
+}
+
+type InjectiveSpotAccountBranch struct {
+	res              *accountsPB.SubaccountBalancesListResponse
+	mux              sync.RWMutex // read write lock
+	Assets           []string
+	Denoms           []string
+	AvailableAmounts []decimal.Decimal
+	TotalAmounts     []decimal.Decimal
+	TotalValues      []decimal.Decimal
+	LockedValues     []decimal.Decimal
+}
+
+type InjectivePositionsBranch struct {
+	res *derivativeExchangePB.PositionsResponse
+	mux sync.RWMutex // read write lock
 }
 
 type Service interface {
@@ -57,29 +85,9 @@ type tradingSvc struct {
 
 	Cancel *context.CancelFunc
 
-	// by trading-team
-	appDown    bool
-	sendAlert  bool
-	historySec int
-	injSymbols []string
-
-	sendSelfOrder  bool
-	bufferTicks    int
-	minPnlPct      int
-	maxDDPct       int
-	maxPositionPct int
-
-	dataCenter dataCenter
-	critical   errRecord
-
-	maxOrderValue int
-	spotSideCount int
-}
-
-type errRecord struct {
-	mu    sync.RWMutex
-	Errs  []string
-	Times []time.Time
+	injSymbols    []string
+	dataCenter    dataCenter
+	maxOrderValue []float64
 }
 
 func NewService(
@@ -91,28 +99,21 @@ func NewService(
 	spotsClient spotExchangePB.InjectiveSpotExchangeRPCClient,
 	derivativesClient derivativeExchangePB.InjectiveDerivativeExchangeRPCClient,
 	oracleClient oraclePB.InjectiveOracleRPCClient,
-	sendAlert bool,
-	historySec int,
 	injSymbols []string,
-	sendSelfOrder bool,
-	bufferTicks int,
-	minPnlPct int,
-	maxDDPct int,
-	maxPositionPct int,
-	maxOrderValue int,
-	spotSideCount int,
+	maxOrderValue []float64,
 ) Service {
 	// set log time stamp formatter
 	formatter := &log.TextFormatter{
 		FullTimestamp:   true,
-		TimestampFormat: "2006-01-02 15:04:05.000",
+		TimestampFormat: "2006-01-02 15:04:05.999",
 	}
-	log.DefaultLogger.SetFormatter(formatter)
-
+	logger := log.New()
+	logger.SetFormatter(formatter)
+	logger.WithField("svc", "trading")
 	return &tradingSvc{
-		logger: log.WithField("svc", "trading"),
+		logger: *logger,
 		svcTags: metrics.Tags{
-			"svc": "trading_bot",
+			"svc": "sgmm_bot",
 		},
 
 		cosmosClient:        cosmosClient,
@@ -123,16 +124,8 @@ func NewService(
 		spotsClient:         spotsClient,
 		derivativesClient:   derivativesClient,
 		oracleClient:        oracleClient,
-		sendAlert:           sendAlert,
-		historySec:          historySec,
 		injSymbols:          injSymbols,
-		sendSelfOrder:       sendSelfOrder,
-		bufferTicks:         bufferTicks,
-		minPnlPct:           minPnlPct,
-		maxDDPct:            maxDDPct,
-		maxPositionPct:      maxPositionPct,
 		maxOrderValue:       maxOrderValue,
-		spotSideCount:       spotSideCount,
 	}
 }
 
@@ -181,26 +174,53 @@ func (s *tradingSvc) DepositAllBankBalances(ctx context.Context) {
 	}
 }
 
-func (s *tradingSvc) MarketMakeSpotMarkets(ctx context.Context) {
-	s.dataCenter.UpdateInterval = 1 // 1 sec
+func (s *tradingSvc) MarketMakeDerivativeMarkets(ctx context.Context) {
+	s.dataCenter.UpdateInterval = 2000 // milli sec
 	// setting strategy
-	strategy := "singleExchangeMM"
-
+	quotes := []string{"USDT"}
 	accountCheckInterval := time.Duration(20)
-	// setting symbol for each exchange
 
+	// get account balances data first
+	if err := s.GetInjectiveSpotAccount(ctx); err != nil {
+		s.logger.Infof("Failed to get Injective account")
+		return
+	}
 	resp, err := s.spotsClient.Markets(ctx, &spotExchangePB.MarketsRequest{})
 	if err != nil || resp == nil {
 		s.logger.Infof("Failed to get spot markets")
 		return
 	}
 
-	s.appDown = false
+	s.InitialInjectiveAccountBalances(quotes, resp)
+	s.InitialInjAssetWithDenom(quotes, resp)
+
+	go s.UpdateInjectiveSpotAccountSession(ctx, accountCheckInterval)
+
+	if err := s.GetInjectivePositions(ctx); err != nil {
+		s.logger.Infof("Failed to get Injective positions")
+		return
+	}
+	go s.UpdateInjectivePositionSession(ctx, accountCheckInterval)
+
+	respDerivative, err := s.derivativesClient.Markets(ctx, &derivativeExchangePB.MarketsRequest{})
+	if err != nil || respDerivative == nil {
+		s.logger.Infof("Failed to get derivative markets")
+		return
+	}
+
 	var strategyCount int = 0
-	for _, market := range resp.Markets {
+	for _, market := range respDerivative.Markets {
+		var adjTicker string
+		if strings.Contains(market.Ticker, " ") {
+			tmp := strings.Split(market.Ticker, " ")
+			if tmp[1] != "PERP" || len(tmp) != 2 {
+				continue
+			}
+			adjTicker = tmp[0]
+		}
 		for i, symbol := range s.injSymbols {
-			if symbol == market.Ticker {
-				s.StrategyHub(ctx, market, i, strategy, accountCheckInterval)
+			if symbol == adjTicker {
+				go s.SingleExchangeMM(ctx, market, i, accountCheckInterval)
 				strategyCount++
 			}
 		}
@@ -208,43 +228,13 @@ func (s *tradingSvc) MarketMakeSpotMarkets(ctx context.Context) {
 	s.logger.Infof("Launching %d strategy!", strategyCount)
 }
 
-// choose strategy
-func (s *tradingSvc) StrategyHub(ctx context.Context, m *spotExchangePB.SpotMarketInfo, idx int, strategy string, interval time.Duration) {
-	switch strategy {
-	case "singleExchangeMM":
-		go s.SingleExchangeMM(ctx, m, idx, interval)
-	}
-}
-
-/*
-func (s *tradingSvc) MarketMakeDerivativeMarkets(ctx context.Context) {
-	resp, err := s.derivativesClient.Markets(ctx, &derivativeExchangePB.MarketsRequest{})
-	if err != nil || resp == nil {
-		s.logger.Infof("Failed to get derivatives markets")
-	}
-
-	for _, market := range resp.Markets {
-		go s.PostDerivativeLimitOrders(ctx, market)
-		go s.CancelDerivativeLimitOrders(ctx, market)
-	}
-}
-*/
-
 func (s *tradingSvc) Start() (err error) {
 	defer s.panicRecover(&err)
-
-	s.logger.Infoln("Service starts")
-
 	// main bot loop
 	ctx, cancel := context.WithCancel(context.Background())
 	s.Cancel = &cancel
-
-	resp, err := s.exchangeClient.Version(ctx, &exchangePB.VersionRequest{})
-	s.logger.Infof("Connected to Exchange API %s (build %s)", resp.Version, resp.MetaData["BuildDate"])
-
 	s.DepositAllBankBalances(ctx)
-	go s.MarketMakeSpotMarkets(ctx)
-
+	go s.MarketMakeDerivativeMarkets(ctx)
 	return nil
 }
 
@@ -263,88 +253,5 @@ func (s *tradingSvc) panicRecover(err *error) {
 
 func (s *tradingSvc) Close() {
 	// graceful shutdown if needed
-	fmt.Println("\r- Ctrl+C pressed in Terminal, Stopping the strategy in 30 sec")
 	(*s.Cancel)()
-	time.Sleep(time.Second * 30)
-	ctx := context.Background()
-	s.CancelAllSpotOrders(ctx)
-	os.Exit(1)
-}
-
-func (s *tradingSvc) CancelAllSpotOrders(ctx context.Context) {
-	sender := s.cosmosClient.FromAddress()
-	subaccountID := defaultSubaccount(sender)
-	resp, err := s.spotsClient.Markets(ctx, &spotExchangePB.MarketsRequest{})
-	if err != nil || resp == nil {
-		message := fmt.Sprintf("❌ Failed to get spot markets when shutting down the app, need MANUALLY CANCEL orders after seeing this err: %s\n", err.Error())
-		s.logger.Errorln(message)
-		go s.SendCritialAlertToDiscord(message)
-		return
-	}
-	for _, market := range resp.Markets {
-		for _, symbol := range s.injSymbols {
-			if symbol == market.Ticker {
-				respOrders, err := s.spotsClient.Orders(ctx, &spotExchangePB.OrdersRequest{
-					SubaccountId: subaccountID.Hex(),
-					MarketId:     market.MarketId,
-				})
-				if err != nil {
-					message := fmt.Sprintf("❌ Error while fetching %s spot orders when shutting down the app, need MANUALLY CANCEL orders after seeing this err: %s\n", market.Ticker, err.Error())
-					s.logger.Errorln(message)
-					go s.SendCritialAlertToDiscord(message)
-					continue
-
-				}
-				msgs := make([]cosmtypes.Msg, 0)
-				for _, order := range respOrders.Orders {
-					msg := &exchangetypes.MsgCancelSpotOrder{
-						Sender:       sender.String(),
-						MarketId:     market.MarketId,
-						SubaccountId: subaccountID.Hex(),
-						OrderHash:    order.OrderHash,
-					}
-					msgs = append(msgs, msg)
-				}
-				s.HandleOrdersCancelingWhenAppClose(
-					len(msgs),
-					msgs,
-					market.Ticker,
-				)
-			}
-		}
-	}
-}
-
-func (s *tradingSvc) SendRegularInfoToDiscord(message string) {
-	if !s.sendAlert {
-		return
-	}
-	wa, err := discordhook.NewWebhookAPI(000, "xxx", true, nil)
-	if err != nil {
-		s.logger.Errorln("Failed to send regular info to discord!")
-	}
-
-	_, err = wa.Execute(nil, &discordhook.WebhookExecuteParams{
-		Content: message,
-	}, nil, "")
-	if err != nil {
-		s.logger.Errorln("Failed to send regular info to discord!")
-	}
-}
-
-func (s *tradingSvc) SendCritialAlertToDiscord(message string) {
-	if !s.sendAlert {
-		return
-	}
-	wa, err := discordhook.NewWebhookAPI(000, "xxx", true, nil)
-	if err != nil {
-		s.logger.Errorln("Failed to send critical alert to discord!")
-	}
-
-	_, err = wa.Execute(nil, &discordhook.WebhookExecuteParams{
-		Content: message,
-	}, nil, "")
-	if err != nil {
-		s.logger.Errorln("Failed to send critical alert to discord!")
-	}
 }

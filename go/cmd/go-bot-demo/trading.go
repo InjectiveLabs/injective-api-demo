@@ -12,7 +12,8 @@ import (
 	"github.com/xlab/closer"
 	log "github.com/xlab/suplog"
 
-	"github.com/InjectiveLabs/injective-trading-bot/trading"
+	"go-bot-demo/trading"
+
 	chainclient "github.com/InjectiveLabs/sdk-go/chain/client"
 	chaintypes "github.com/InjectiveLabs/sdk-go/chain/exchange/types"
 	accountsPB "github.com/InjectiveLabs/sdk-go/exchange/accounts_rpc/pb"
@@ -55,18 +56,8 @@ func tradingCmd(cmd *cli.Cmd) {
 		statsdDisabled *string
 
 		// Trading parameters
-		sendAlert      *bool
-		historySec     *int
-		injSymbols     *[]string
-		bufferTicks    *int
-		minPnlPct      *int
-		maxDDPct       *int
-		maxPositionPct *int
-
-		maxOrderValue *int
-		spotSideCount *int
-
-		sendSelfOrder *bool
+		injSymbols    *[]string
+		maxOrderValue *[]float64
 	)
 
 	initCosmosOptions(
@@ -104,16 +95,8 @@ func tradingCmd(cmd *cli.Cmd) {
 
 	initTradingOptions(
 		cmd,
-		&sendAlert,
-		&historySec,
 		&injSymbols,
-		&sendSelfOrder,
-		&bufferTicks,
-		&minPnlPct,
-		&maxDDPct,
-		&maxPositionPct,
 		&maxOrderValue,
-		&spotSideCount,
 	)
 
 	cmd.Action = func() {
@@ -195,16 +178,8 @@ func tradingCmd(cmd *cli.Cmd) {
 			spotExchangePB.NewInjectiveSpotExchangeRPCClient(exchangeConn),
 			derivativeExchangePB.NewInjectiveDerivativeExchangeRPCClient(exchangeConn),
 			oraclePB.NewInjectiveOracleRPCClient(exchangeConn),
-			*sendAlert,
-			*historySec,
 			*injSymbols,
-			*sendSelfOrder,
-			*bufferTicks,
-			*minPnlPct,
-			*maxDDPct,
-			*maxPositionPct,
 			*maxOrderValue,
-			*spotSideCount,
 		)
 		closer.Bind(func() {
 			svc.Close()

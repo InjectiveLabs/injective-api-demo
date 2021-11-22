@@ -40,23 +40,25 @@ func getPrice(price decimal.Decimal, baseDecimals, quoteDecimals int, minPriceTi
 		fmt.Println(priceStr, scale.String(), price.String())
 		fmt.Println(decPrice.String())
 	}
+	realPrice := formatToTickSize(decPrice, minPriceTickSize)
+	return realPrice
+}
 
-	residue := new(big.Int).Mod(decPrice.BigInt(), minPriceTickSize.BigInt())
-	//fmt.Printf("%s mod %s is %s\n",decPrice.BigInt().String(), minPriceTickSize.BigInt().String(), residue.String())
-	formattedPrice := new(big.Int).Sub(decPrice.BigInt(), residue)
-	//fmt.Println(residue.String(), formattedPrice.String(), cosmtypes.NewDecFromBigInt(formattedPrice).String())
-	//fmt.Println(decPrice.String(), minPriceTickSize.String())
-	p := decimal.NewFromBigInt(formattedPrice, -18).String()
-	//fmt.Println("p", p)
-	realPrice, _ := cosmtypes.NewDecFromStr(p)
-	//fmt.Println("returning realPrice", realPrice.String())
+func getPriceForDerivative(price decimal.Decimal, quoteDecimals int, minPriceTickSize cosmtypes.Dec) cosmtypes.Dec {
+	decScale := decimal.New(1, int32(quoteDecimals))
+	priceStr := price.Mul(decScale).StringFixed(18)
+	mid := cosmtypes.MustNewDecFromStr(priceStr)
+	baseDec := cosmtypes.MustNewDecFromStr("1")
+	scale := baseDec.Quo(minPriceTickSize) // from tick size to coin size
+	midScaledInt := mid.Mul(scale).TruncateDec()
+	realPrice := minPriceTickSize.Mul(midScaledInt)
 	return realPrice
 }
 
 func formatToTickSize(value, tickSize cosmtypes.Dec) cosmtypes.Dec {
 	residue := new(big.Int).Mod(value.BigInt(), tickSize.BigInt())
 	formattedValue := new(big.Int).Sub(value.BigInt(), residue)
-	p := decimal.NewFromBigInt(formattedValue, -18).String()
+	p := decimal.NewFromBigInt(formattedValue, -18).StringFixed(18)
 	realValue, _ := cosmtypes.NewDecFromStr(p)
 	return realValue
 }
@@ -64,8 +66,18 @@ func formatToTickSize(value, tickSize cosmtypes.Dec) cosmtypes.Dec {
 // convert decimal.Decimal into acceptable quantity, (input value's unit is coin, ex: 5 inj)
 func getQuantity(value decimal.Decimal, minTickSize cosmtypes.Dec, baseDecimals int) (qty cosmtypes.Dec) {
 	mid, _ := cosmtypes.NewDecFromStr(value.String())
-	bStr := decimal.New(1, int32(baseDecimals)).String()
+	bStr := decimal.New(1, int32(baseDecimals)).StringFixed(18)
 	baseDec, _ := cosmtypes.NewDecFromStr(bStr)
+	scale := baseDec.Quo(minTickSize) // from tick size to coin size
+	midScaledInt := mid.Mul(scale).TruncateDec()
+	qty = minTickSize.Mul(midScaledInt)
+	return qty
+}
+
+// convert decimal.Decimal into acceptable quantity, (input value's unit is coin, ex: 5 inj)
+func getQuantityForDerivative(value decimal.Decimal, minTickSize cosmtypes.Dec, quoteDecimals int) (qty cosmtypes.Dec) {
+	mid, _ := cosmtypes.NewDecFromStr(value.String())
+	baseDec := cosmtypes.MustNewDecFromStr("1")
 	scale := baseDec.Quo(minTickSize) // from tick size to coin size
 	midScaledInt := mid.Mul(scale).TruncateDec()
 	qty = minTickSize.Mul(midScaledInt)
@@ -74,7 +86,16 @@ func getQuantity(value decimal.Decimal, minTickSize cosmtypes.Dec, baseDecimals 
 
 //convert cosmostype.Dec into readable string price
 func getPriceForPrintOut(price cosmtypes.Dec, baseDecimals, quoteDecimals int) (priceOut float64) {
-	scale := decimal.New(1, int32(baseDecimals-quoteDecimals)).String()
+	scale := decimal.New(1, int32(baseDecimals-quoteDecimals)).StringFixed(18)
+	scaleCos, _ := cosmtypes.NewDecFromStr(scale)
+	priceStr := price.Mul(scaleCos).String()
+	priceOut, _ = strconv.ParseFloat(priceStr, 64)
+	return priceOut
+}
+
+//convert cosmostype.Dec into readable string price
+func getPriceForPrintOutForDerivative(price cosmtypes.Dec, quoteDecimals int) (priceOut float64) {
+	scale := decimal.New(1, int32(-quoteDecimals)).StringFixed(18)
 	scaleCos, _ := cosmtypes.NewDecFromStr(scale)
 	priceStr := price.Mul(scaleCos).String()
 	priceOut, _ = strconv.ParseFloat(priceStr, 64)
@@ -99,4 +120,13 @@ func TimeOfNextUTCDay() time.Time {
 	nextUTCday := now.Add(time.Hour * 24)
 	nextUTCday = time.Date(nextUTCday.Year(), nextUTCday.Month(), nextUTCday.Day(), 0, 0, 0, 0, nextUTCday.Location())
 	return nextUTCday
+}
+
+//convert cosmostype.Dec into readable decimal price
+func getPriceIntoDecimalForDerivative(price cosmtypes.Dec, quoteDecimals int) (priceOut decimal.Decimal) {
+	scale := decimal.New(1, int32(-quoteDecimals)).String()
+	scaleCos, _ := cosmtypes.NewDecFromStr(scale)
+	priceStr := price.Mul(scaleCos).String()
+	priceOut, _ = decimal.NewFromString(priceStr)
+	return priceOut
 }

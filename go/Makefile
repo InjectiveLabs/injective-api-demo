@@ -1,8 +1,8 @@
 APP_VERSION = $(shell git describe --abbrev=0 --tags)
 GIT_COMMIT = $(shell git rev-parse --short HEAD)
 BUILD_DATE = $(shell date -u "+%Y%m%d-%H%M")
-VERSION_PKG = github.com/InjectiveLabs/injective-trading-bot/version
-IMAGE_NAME := gcr.io/injective-core/injective-trading-bot
+VERSION_PKG = go-bot-demo/version
+IMAGE_NAME := go-bot-demo
 
 all:
 

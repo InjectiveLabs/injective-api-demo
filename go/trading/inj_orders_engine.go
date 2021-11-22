@@ -8,21 +8,28 @@ import (
 	"sync"
 	"time"
 
-	spotExchangePB "github.com/InjectiveLabs/sdk-go/exchange/spot_exchange_rpc/pb"
+	derivativeExchangePB "github.com/InjectiveLabs/sdk-go/exchange/derivative_exchange_rpc/pb"
 	cosmtypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/shopspring/decimal"
 )
 
-func (m *SpotMarketInfo) SortingSpotLimitOrders(respOrders []*spotExchangePB.SpotLimitOrder) {
+const (
+	Add    = "Add"
+	Reduce = "Reduce"
+	Wait   = "Wait"
+)
+
+func (m *DerivativeMarketInfo) SortingDerivativeLimitOrders(respOrders []*derivativeExchangePB.DerivativeLimitOrder) {
 	l := len(respOrders)
 	if l == 0 {
 		return
 	}
 	var wg sync.WaitGroup
-	bids := make([]*spotExchangePB.SpotLimitOrder, 0, l)
-	asks := make([]*spotExchangePB.SpotLimitOrder, 0, l)
+	bids := make([]*derivativeExchangePB.DerivativeLimitOrder, 0, l)
+	asks := make([]*derivativeExchangePB.DerivativeLimitOrder, 0, l)
 	for _, order := range respOrders {
-		switch order.OrderType {
+		switch order.OrderSide {
 		case "sell":
 			asks = append(asks, order)
 		case "buy":
@@ -56,30 +63,30 @@ func (m *SpotMarketInfo) SortingSpotLimitOrders(respOrders []*spotExchangePB.Spo
 }
 
 // check order is below / above mid price to prevent self trade
-func (m *SpotMarketInfo) CheckNewOrderIsSafe(orderType string, newOrderPrice, bestAskPrice, bestBidPrice cosmtypes.Dec, oldBidOrder, oldAskOrder *spotExchangePB.SpotLimitOrder) (safe bool) {
+func (m *DerivativeMarketInfo) CheckNewOrderIsSafe(orderType string, newOrderPrice, bestAskPrice, bestBidPrice cosmtypes.Dec, oldBidOrder, oldAskOrder *derivativeExchangePB.DerivativeLimitOrder) (safe bool) {
 	if m.CosmOraclePrice.IsZero() {
 		return safe
 	}
 	switch strings.ToLower(orderType) {
 	case "buy":
 		if oldAskOrder == nil {
-			if !newOrderPrice.GTE(m.CosmOraclePrice) && !newOrderPrice.GTE(bestAskPrice) {
+			if !newOrderPrice.GTE(m.CosmOraclePrice) && !newOrderPrice.Add(m.MinPriceTickSize).GTE(bestAskPrice) {
 				safe = true
 			}
 		} else {
 			oldBestPrice := cosmtypes.MustNewDecFromStr(oldAskOrder.Price)
-			if !newOrderPrice.GTE(m.CosmOraclePrice) && !newOrderPrice.GTE(oldBestPrice) && !newOrderPrice.GTE(bestAskPrice) { // shall compare bid ask price as well, to do!!
+			if !newOrderPrice.GTE(m.CosmOraclePrice) && !newOrderPrice.Add(m.MinPriceTickSize).GTE(oldBestPrice) && !newOrderPrice.Add(m.MinPriceTickSize).GTE(bestAskPrice) {
 				safe = true
 			}
 		}
 	case "sell":
 		if oldBidOrder == nil {
-			if !newOrderPrice.LTE(m.CosmOraclePrice) && !newOrderPrice.LTE(bestBidPrice) {
+			if !newOrderPrice.LTE(m.CosmOraclePrice) && !newOrderPrice.Sub(m.MinPriceTickSize).LTE(bestBidPrice) {
 				safe = true
 			}
 		} else {
 			oldBestPrice := cosmtypes.MustNewDecFromStr(oldBidOrder.Price)
-			if !newOrderPrice.LTE(m.CosmOraclePrice) && !newOrderPrice.LTE(oldBestPrice) && !newOrderPrice.LTE(bestBidPrice) {
+			if !newOrderPrice.LTE(m.CosmOraclePrice) && !newOrderPrice.Sub(m.MinPriceTickSize).LTE(oldBestPrice) && !newOrderPrice.Sub(m.MinPriceTickSize).LTE(bestBidPrice) {
 				safe = true
 			}
 		}
@@ -87,7 +94,37 @@ func (m *SpotMarketInfo) CheckNewOrderIsSafe(orderType string, newOrderPrice, be
 	return safe
 }
 
-func (m *SpotMarketInfo) CancelBidOrdersFromOrderList(inputOrders []*spotExchangePB.SpotLimitOrder) {
+func (m *DerivativeMarketInfo) UpdateBidOrders(inputOrder *derivativeExchangePB.DerivativeLimitOrder) {
+	m.BidOrders.mux.Lock()
+	defer m.BidOrders.mux.Unlock()
+	l := len(m.BidOrders.Orders)
+	if l == 0 {
+		return
+	}
+	for i := 0; i < l; i++ {
+		hash := m.BidOrders.Orders[i].OrderHash
+		if inputOrder.OrderHash == hash {
+			m.BidOrders.Orders[i] = inputOrder
+		}
+	}
+}
+
+func (m *DerivativeMarketInfo) UpdateAskOrders(inputOrder *derivativeExchangePB.DerivativeLimitOrder) {
+	m.AskOrders.mux.Lock()
+	defer m.AskOrders.mux.Unlock()
+	l := len(m.AskOrders.Orders)
+	if l == 0 {
+		return
+	}
+	for i := 0; i < l; i++ {
+		hash := m.AskOrders.Orders[i].OrderHash
+		if inputOrder.OrderHash == hash {
+			m.AskOrders.Orders[i] = inputOrder
+		}
+	}
+}
+
+func (m *DerivativeMarketInfo) CancelBidOrdersFromOrderList(inputOrders []*derivativeExchangePB.DerivativeLimitOrder) {
 	m.BidOrders.mux.Lock()
 	defer m.BidOrders.mux.Unlock()
 	l := len(m.BidOrders.Orders)
@@ -98,7 +135,7 @@ func (m *SpotMarketInfo) CancelBidOrdersFromOrderList(inputOrders []*spotExchang
 	for _, order := range inputOrders {
 		bidIdx[order.OrderHash] = struct{}{}
 	}
-	var newBidOrders []*spotExchangePB.SpotLimitOrder
+	var newBidOrders []*derivativeExchangePB.DerivativeLimitOrder
 	for i := 0; i < l; i++ {
 		hash := m.BidOrders.Orders[i].OrderHash
 		if _, ok := bidIdx[hash]; !ok {
@@ -108,7 +145,7 @@ func (m *SpotMarketInfo) CancelBidOrdersFromOrderList(inputOrders []*spotExchang
 	m.BidOrders.Orders = newBidOrders
 }
 
-func (m *SpotMarketInfo) CancelBidOrdersFromOrderListByHash(inputHash []string) {
+func (m *DerivativeMarketInfo) CancelBidOrdersFromOrderListByHash(inputHash []string) {
 	m.BidOrders.mux.Lock()
 	defer m.BidOrders.mux.Unlock()
 	l := len(m.BidOrders.Orders)
@@ -119,7 +156,7 @@ func (m *SpotMarketInfo) CancelBidOrdersFromOrderListByHash(inputHash []string) 
 	for _, hash := range inputHash {
 		bidIdx[hash] = struct{}{}
 	}
-	var newBidOrders []*spotExchangePB.SpotLimitOrder
+	var newBidOrders []*derivativeExchangePB.DerivativeLimitOrder
 	for i := 0; i < l; i++ {
 		hash := m.BidOrders.Orders[i].OrderHash
 		if _, ok := bidIdx[hash]; !ok {
@@ -129,7 +166,7 @@ func (m *SpotMarketInfo) CancelBidOrdersFromOrderListByHash(inputHash []string) 
 	m.BidOrders.Orders = newBidOrders
 }
 
-func (m *SpotMarketInfo) CancelAskOrdersFromOrderList(inputOrders []*spotExchangePB.SpotLimitOrder) {
+func (m *DerivativeMarketInfo) CancelAskOrdersFromOrderList(inputOrders []*derivativeExchangePB.DerivativeLimitOrder) {
 	m.AskOrders.mux.Lock()
 	defer m.AskOrders.mux.Unlock()
 	l := len(m.AskOrders.Orders)
@@ -140,7 +177,7 @@ func (m *SpotMarketInfo) CancelAskOrdersFromOrderList(inputOrders []*spotExchang
 	for _, order := range inputOrders {
 		askIdx[order.OrderHash] = struct{}{}
 	}
-	var newAskOrders []*spotExchangePB.SpotLimitOrder
+	var newAskOrders []*derivativeExchangePB.DerivativeLimitOrder
 	for i := 0; i < l; i++ {
 		hash := m.AskOrders.Orders[i].OrderHash
 		if _, ok := askIdx[hash]; !ok {
@@ -150,7 +187,7 @@ func (m *SpotMarketInfo) CancelAskOrdersFromOrderList(inputOrders []*spotExchang
 	m.AskOrders.Orders = newAskOrders
 }
 
-func (m *SpotMarketInfo) CancelAskOrdersFromOrderListByHash(inputHash []string) {
+func (m *DerivativeMarketInfo) CancelAskOrdersFromOrderListByHash(inputHash []string) {
 	m.AskOrders.mux.Lock()
 	defer m.AskOrders.mux.Unlock()
 	l := len(m.AskOrders.Orders)
@@ -161,7 +198,7 @@ func (m *SpotMarketInfo) CancelAskOrdersFromOrderListByHash(inputHash []string) 
 	for _, hash := range inputHash {
 		askIdx[hash] = struct{}{}
 	}
-	var newAskOrders []*spotExchangePB.SpotLimitOrder
+	var newAskOrders []*derivativeExchangePB.DerivativeLimitOrder
 	for i := 0; i < l; i++ {
 		hash := m.AskOrders.Orders[i].OrderHash
 		if _, ok := askIdx[hash]; !ok {
@@ -171,85 +208,72 @@ func (m *SpotMarketInfo) CancelAskOrdersFromOrderListByHash(inputHash []string) 
 	m.AskOrders.Orders = newAskOrders
 }
 
-func (m *SpotMarketInfo) InsertBidOrders(inputOrders []*spotExchangePB.SpotLimitOrder) {
-	if len(inputOrders) == 0 {
-		return
-	}
-	m.BidOrders.mux.Lock()
-	defer m.BidOrders.mux.Unlock()
-	l := len(m.BidOrders.Orders)
-	if l == 0 {
-		m.BidOrders.Orders = inputOrders
-		return
-	}
+func (m *DerivativeMarketInfo) InsertBidOrders(inputOrder *derivativeExchangePB.DerivativeLimitOrder) {
+	var needToSort bool = false
+	m.BidOrders.mux.RLock()
 	newBidOrders := m.BidOrders.Orders
-	newBidOrders = append(newBidOrders, inputOrders...)
-	sort.Slice(newBidOrders, func(p, q int) bool {
-		cosp, _ := cosmtypes.NewDecFromStr(newBidOrders[p].Price)
-		cosq, _ := cosmtypes.NewDecFromStr(newBidOrders[q].Price)
-		return cosp.GT(cosq)
-	})
-	m.BidOrders.Orders = newBidOrders
+	m.BidOrders.mux.RUnlock()
+
+	if m.IsMyBidOrder(inputOrder.OrderHash) {
+		// already in the pool
+		return
+	}
+	newBidOrders = append(newBidOrders, inputOrder)
+	if !needToSort {
+		needToSort = true
+	}
+	if needToSort {
+		sort.Slice(newBidOrders, func(p, q int) bool {
+			cosp, _ := cosmtypes.NewDecFromStr(newBidOrders[p].Price)
+			cosq, _ := cosmtypes.NewDecFromStr(newBidOrders[q].Price)
+			return cosp.GT(cosq)
+		})
+		m.BidOrders.mux.Lock()
+		m.BidOrders.Orders = newBidOrders
+		m.BidOrders.mux.Unlock()
+	} // else no need to re-define BidOrders
 }
 
-func (m *SpotMarketInfo) InsertAskOrders(inputOrders []*spotExchangePB.SpotLimitOrder) {
-	if len(inputOrders) == 0 {
-		return
-	}
-	m.AskOrders.mux.Lock()
-	defer m.AskOrders.mux.Unlock()
-	l := len(m.AskOrders.Orders)
-	if l == 0 {
-		m.AskOrders.Orders = inputOrders
-		return
-	}
+func (m *DerivativeMarketInfo) InsertAskOrders(inputOrder *derivativeExchangePB.DerivativeLimitOrder) {
+	var needToSort bool = false
+	m.AskOrders.mux.RLock()
 	newAskOrders := m.AskOrders.Orders
-	newAskOrders = append(newAskOrders, inputOrders...)
-	sort.Slice(newAskOrders, func(p, q int) bool {
-		cosp, _ := cosmtypes.NewDecFromStr(newAskOrders[p].Price)
-		cosq, _ := cosmtypes.NewDecFromStr(newAskOrders[q].Price)
-		return cosp.LT(cosq)
-	})
-	m.AskOrders.Orders = newAskOrders
+	m.AskOrders.mux.RUnlock()
+
+	if m.IsMyAskOrder(inputOrder.OrderHash) {
+		return
+	}
+	newAskOrders = append(newAskOrders, inputOrder)
+	if !needToSort {
+		needToSort = true
+	}
+	if needToSort {
+		sort.Slice(newAskOrders, func(p, q int) bool {
+			cosp, _ := cosmtypes.NewDecFromStr(newAskOrders[p].Price)
+			cosq, _ := cosmtypes.NewDecFromStr(newAskOrders[q].Price)
+			return cosp.LT(cosq)
+		})
+		m.AskOrders.mux.Lock()
+		m.AskOrders.Orders = newAskOrders
+		m.AskOrders.mux.Unlock()
+	}
 }
 
-func (m *SpotMarketInfo) GetBidOrdersLen() (l int) {
+func (m *DerivativeMarketInfo) GetBidOrdersLen() (l int) {
 	m.BidOrders.mux.RLock()
 	l = len(m.BidOrders.Orders)
 	m.BidOrders.mux.RUnlock()
 	return l
 }
 
-func (m *SpotMarketInfo) GetAskOrdersLen() (l int) {
+func (m *DerivativeMarketInfo) GetAskOrdersLen() (l int) {
 	m.AskOrders.mux.RLock()
 	l = len(m.AskOrders.Orders)
 	m.AskOrders.mux.RUnlock()
 	return l
 }
 
-func (m *SpotMarketInfo) GetNewBidOrdersFromReduce(s *tradingSvc) (canceledOrders []*spotExchangePB.SpotLimitOrder) {
-	m.BidOrders.mux.Lock()
-	defer m.BidOrders.mux.Unlock()
-	bidLen := len(m.BidOrders.Orders)
-	extra := bidLen - s.spotSideCount
-	canceledOrders = m.BidOrders.Orders[bidLen-extra:]
-	newBidOrders := m.BidOrders.Orders[:s.spotSideCount]
-	m.BidOrders.Orders = newBidOrders
-	return canceledOrders
-}
-
-func (m *SpotMarketInfo) GetNewAskOrdersFromReduce(s *tradingSvc) (canceledOrders []*spotExchangePB.SpotLimitOrder) {
-	m.AskOrders.mux.Lock()
-	defer m.AskOrders.mux.Unlock()
-	askLen := len(m.AskOrders.Orders)
-	extra := askLen - s.spotSideCount
-	canceledOrders = m.AskOrders.Orders[askLen-extra:]
-	newAskOrders := m.AskOrders.Orders[:s.spotSideCount]
-	m.AskOrders.Orders = newAskOrders
-	return canceledOrders
-}
-
-func (m *SpotMarketInfo) GetBidOrder(level int) (order *spotExchangePB.SpotLimitOrder) {
+func (m *DerivativeMarketInfo) GetBidOrder(level int) (order *derivativeExchangePB.DerivativeLimitOrder) {
 	m.BidOrders.mux.RLock()
 	defer m.BidOrders.mux.RUnlock()
 	l := len(m.BidOrders.Orders)
@@ -260,7 +284,7 @@ func (m *SpotMarketInfo) GetBidOrder(level int) (order *spotExchangePB.SpotLimit
 	return order
 }
 
-func (m *SpotMarketInfo) GetAskOrder(level int) (order *spotExchangePB.SpotLimitOrder) {
+func (m *DerivativeMarketInfo) GetAskOrder(level int) (order *derivativeExchangePB.DerivativeLimitOrder) {
 	m.AskOrders.mux.RLock()
 	m.AskOrders.mux.RUnlock()
 	l := len(m.AskOrders.Orders)
@@ -271,7 +295,7 @@ func (m *SpotMarketInfo) GetAskOrder(level int) (order *spotExchangePB.SpotLimit
 	return order
 }
 
-func (m *SpotMarketInfo) IsMyBidOrder(hash string) bool {
+func (m *DerivativeMarketInfo) IsMyBidOrder(hash string) bool {
 	m.BidOrders.mux.RLock()
 	defer m.BidOrders.mux.RUnlock()
 	for _, order := range m.BidOrders.Orders {
@@ -282,7 +306,7 @@ func (m *SpotMarketInfo) IsMyBidOrder(hash string) bool {
 	return false
 }
 
-func (m *SpotMarketInfo) IsMyAskOrder(hash string) bool {
+func (m *DerivativeMarketInfo) IsMyAskOrder(hash string) bool {
 	m.AskOrders.mux.RLock()
 	defer m.AskOrders.mux.RUnlock()
 	for _, order := range m.AskOrders.Orders {
@@ -293,27 +317,74 @@ func (m *SpotMarketInfo) IsMyAskOrder(hash string) bool {
 	return false
 }
 
-func (s *tradingSvc) InitialOrderList(ctx context.Context, m *spotExchangePB.SpotMarketInfo, subaccountID *common.Hash, marketInfo *SpotMarketInfo, ErrCh *chan map[string]interface{}) {
-	var respOrders *spotExchangePB.OrdersResponse
-	respOrders, err := s.spotsClient.Orders(ctx, &spotExchangePB.OrdersRequest{
+func (s *tradingSvc) InitialOrderList(ctx context.Context, m *derivativeExchangePB.DerivativeMarketInfo, subaccountID *common.Hash, marketInfo *DerivativeMarketInfo) {
+	var respOrders *derivativeExchangePB.OrdersResponse
+	respOrders, err := s.derivativesClient.Orders(ctx, &derivativeExchangePB.OrdersRequest{
 		SubaccountId: subaccountID.Hex(),
 		MarketId:     m.MarketId,
 	})
 	if err != nil || respOrders == nil {
 		messageIdx := 1
-		message := fmt.Sprintf("❌ Error while fetching %s spot orders: %s\n", m.Ticker, err.Error())
-		e := make(map[string]interface{})
-		e["critical"] = true
-		e["count"] = true
-		e["wait"] = 20
-		e["message"] = message
-		(*ErrCh) <- e
 		if time.Now().After(marketInfo.LastSendMessageTime[messageIdx].Add(time.Second * 600)) {
-			go s.SendCritialAlertToDiscord(message)
+			message := fmt.Sprintf("❌ Error while fetching %s spot orders: %s\n", m.Ticker, err.Error())
+			s.logger.Errorln(message)
 			marketInfo.LastSendMessageTime[messageIdx] = time.Now()
 		}
 		return
 	}
+	new := len(respOrders.Orders)
+	// maintaining order status
+	marketInfo.MaintainOrderStatus(new)
 	// get sorted bid & ask order lists
-	marketInfo.SortingSpotLimitOrders(respOrders.Orders)
+	marketInfo.SortingDerivativeLimitOrders(respOrders.Orders)
+
+}
+
+// pull orders from exchange every few mins, to make sure we are uptodate
+func (s *tradingSvc) UpdateInjectiveOrderSession(ctx context.Context, m *derivativeExchangePB.DerivativeMarketInfo, subaccountID *common.Hash, marketInfo *DerivativeMarketInfo, ErrCh *chan map[string]interface{}) {
+	OrderCheck := time.NewTicker(time.Second * 60)
+	defer OrderCheck.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-OrderCheck.C:
+			s.InitialOrderList(ctx, m, subaccountID, marketInfo)
+			s.logger.Infof("Updated Injective %s spot orders\n", m.Ticker)
+		default:
+			time.Sleep(time.Second)
+		}
+	}
+}
+
+func (m *DerivativeMarketInfo) GetOrderSizeFromBidOrders(hash string) (price, size float64) {
+	m.BidOrders.mux.RLock()
+	defer m.BidOrders.mux.RUnlock()
+	for _, order := range m.BidOrders.Orders {
+		if order.OrderHash == hash {
+			qty, _ := decimal.NewFromString(order.Quantity)
+			floatQty, _ := qty.Float64()
+			scale := decimal.New(1, int32(-m.QuoteDenomDecimals))
+			unScalePrice, _ := decimal.NewFromString(order.Price)
+			floatPrice, _ := unScalePrice.Mul(scale).Float64()
+			return floatPrice, floatQty
+		}
+	}
+	return 0, 0
+}
+
+func (m *DerivativeMarketInfo) GetOrderSizeFromAskOrders(hash string) (price, size float64) {
+	m.AskOrders.mux.RLock()
+	defer m.AskOrders.mux.RUnlock()
+	for _, order := range m.AskOrders.Orders {
+		if order.OrderHash == hash {
+			qty, _ := decimal.NewFromString(order.Quantity)
+			floatQty, _ := qty.Float64()
+			scale := decimal.New(1, int32(-m.QuoteDenomDecimals))
+			unScalePrice, _ := decimal.NewFromString(order.Price)
+			floatPrice, _ := unScalePrice.Mul(scale).Float64()
+			return floatPrice, floatQty
+		}
+	}
+	return 0, 0
 }

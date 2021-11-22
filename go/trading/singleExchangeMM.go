@@ -1,239 +1,139 @@
 package trading
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	exchangetypes "github.com/InjectiveLabs/sdk-go/chain/exchange/types"
-	accountsPB "github.com/InjectiveLabs/sdk-go/exchange/accounts_rpc/pb"
-	spotExchangePB "github.com/InjectiveLabs/sdk-go/exchange/spot_exchange_rpc/pb"
+	derivativeExchangePB "github.com/InjectiveLabs/sdk-go/exchange/derivative_exchange_rpc/pb"
 	cosmtypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/shopspring/decimal"
 	"github.com/tendermint/tendermint/libs/rand"
 )
 
-type SingleExchangeMM struct {
-	Exchanges []string
-	Symbol    []string
-	Bids      [][]interface{}
-	Asks      [][]interface{}
-}
-
-func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *spotExchangePB.SpotMarketInfo, idx int, interval time.Duration) {
-	s.logger.Infof("✅ Start strategy for %s spot market.", m.Ticker)
-	ErrCh := make(chan map[string]interface{}, 10) // isolated err channel for each strategy
+// default with 5x leverage
+func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchangePB.DerivativeMarketInfo, idx int, interval time.Duration) {
+	s.logger.Infof("✅ Start strategy for %s derivative market.", m.Ticker)
 	var Initial bool = true
-	//var rollBack bool = false
-	//var rollBackCountDown time.Time
 	var wg sync.WaitGroup
 	var printOrdersTime time.Time
-	var single SingleExchangeMM
 
 	sender := s.cosmosClient.FromAddress()
 	subaccountID := defaultSubaccount(sender)
-	marketInfo := SpotMarketToMarketInfo(m)
-	marketInfo.StopStrategy = false
-	marketInfo.StopStrategyForDay = false
-	marketInfo.MaxPositionPct = decimal.NewFromInt(int64(s.maxPositionPct)).Div(decimal.NewFromInt(100))
-	marketInfo.MinPnlPct = decimal.NewFromInt(int64(s.minPnlPct)).Div(decimal.NewFromInt(100))
-	marketInfo.MaxDDPct = decimal.NewFromInt(int64(s.maxDDPct)).Div(decimal.NewFromInt(100))
-	marketInfo.HistoricalPrices = make([]decimal.Decimal, 0, s.historySec)
-	marketInfo.HistoricalValues = make([]decimal.Decimal, 0, s.historySec)
+	marketInfo := DerivativeMarketToMarketInfo(m)
 	// set max order value from .env
-	marketInfo.MaxOrderValue = decimal.NewFromInt(int64(s.maxOrderValue))
-	// set as model parameters
-	marketInfo.RiskAversion = 0.1
-	marketInfo.FillIndensity = 0.5
+	marketInfo.MaxOrderValue = decimal.NewFromInt(int64(s.maxOrderValue[idx]))
+
+	buffTickLevel := marketInfo.MinPriceTickSize.Mul(cosmtypes.NewDec(int64(10)))
 
 	marketInfo.LastSendMessageTime = make([]time.Time, 4) // depends on how many critical alerts wanna send with 10 min interval
-	single.Exchanges = []string{"Binance"}
-	err := single.InitMMStrategy(idx, marketInfo, s)
-	if err != nil {
-		s.logger.Errorln("❌ Fail on initial client for cross exchange MM strategy.")
-		return
-	}
-
-	// oracle price session, feat Binance
-	for i, exch := range single.Exchanges {
-		if exch == "Binance" {
-			go s.BinanceTickerSession(ctx, &single, "spot", i, &ErrCh)
-		}
-	}
-	time.Sleep(time.Second * 5)
 	// inj stream trades session
-	go s.StreamInjectiveSpotTradeSession(ctx, m, &subaccountID, marketInfo, &ErrCh)
+	go s.StreamInjectiveDerivativeTradeSession(ctx, m, &subaccountID, marketInfo)
 	// inj stream orders session
-	go s.StreamInjectiveSpotOrderSession(ctx, m, &subaccountID, marketInfo, &ErrCh)
-	// test order session, if the testing order is active
-	go s.SendTestOrder(ctx, marketInfo)
+	//go s.StreamInjectiveDerivativeOrderSession(ctx, m, &subaccountID, marketInfo, ErrCh)
+	// inj stream position session
+	go s.StreamInjectiveDerivativePositionSession(ctx, m, &subaccountID, marketInfo)
 	// inital orders snapshot first
-	s.InitialOrderList(ctx, m, &subaccountID, marketInfo, &ErrCh)
+	//s.InitialOrderList(ctx, m, &subaccountID, marketInfo, ErrCh)
+	// oracle price session
+	go marketInfo.OraclePriceSession(ctx, idx, s, m)
 
 	for {
 		select {
 		case <-ctx.Done():
-			s.appDown = true
 			return
-		case e := <-ErrCh: // wait for response first
-			s.SessionErrHandling(&e)
-			continue
 		default:
-			// renew critical errs list
-			go s.RenewCriticalErrs()
-
-			// get oracle price part
-			err := marketInfo.GetOraclePrice(&single, s.historySec)
-			if err != nil {
-				s.logger.Infoln("Wait 5 sec for connecting reference price")
+			// check oracle price part
+			if !marketInfo.OracleReady {
+				message := fmt.Sprintf("Wait 5 sec for connecting reference price")
+				s.logger.Errorln(message)
 				time.Sleep(time.Second * 5)
 				continue
 			}
+			// initial orders
+			s.InitialOrderList(ctx, m, &subaccountID, marketInfo)
 
-			// get account balance part
-			var getAccountErr bool = false
-			respBalance, err := s.accountsClient.SubaccountBalancesList(ctx, &accountsPB.SubaccountBalancesListRequest{
-				SubaccountId: subaccountID.Hex(),
-			})
-			if err != nil || respBalance == nil {
-				messageIdx := 0
-				message := fmt.Sprintf("❌ Failed to get Injective subaccount balances for %s\n", marketInfo.Ticker)
-				e := make(map[string]interface{})
-				e["critical"] = true
-				e["count"] = true
-				e["wait"] = 20
-				e["message"] = message
-				ErrCh <- e
-				if time.Now().After(marketInfo.LastSendMessageTime[messageIdx].Add(time.Second * 600)) {
-					go s.SendCritialAlertToDiscord(message)
-					marketInfo.LastSendMessageTime[messageIdx] = time.Now()
-				}
-				getAccountErr = true
-				continue
-			}
-			for _, balance := range respBalance.Balances {
-				switch balance.Denom {
-				case marketInfo.BaseDenom:
-					avaiB, _ := decimal.NewFromString(balance.Deposit.AvailableBalance)
-					marketInfo.BaseAvailableBalance = decimal.NewFromBigInt(avaiB.BigInt(), int32(-marketInfo.BaseDenomDecimals))
-					totalB, _ := decimal.NewFromString(balance.Deposit.TotalBalance)
-					marketInfo.BaseTotalBalance = decimal.NewFromBigInt(totalB.BigInt(), int32(-marketInfo.BaseDenomDecimals))
-				case marketInfo.QuoteDenom:
-					avaiQ, _ := decimal.NewFromString(balance.Deposit.AvailableBalance)
-					marketInfo.QuoteAvailableBalance = decimal.NewFromBigInt(avaiQ.BigInt(), int32(-marketInfo.QuoteDenomDecimals))
-					totalQ, _ := decimal.NewFromString(balance.Deposit.TotalBalance)
-					marketInfo.QuoteTotalBalance = decimal.NewFromBigInt(totalQ.BigInt(), int32(-marketInfo.QuoteDenomDecimals))
-				}
-			}
-
-			// setting strategy parameter according to inventory conditions
-			s.CalculateOverallvalue(marketInfo, s.historySec, &ErrCh)
-
-			if Initial { // initial min pnl's check value when strategy just launched
-				marketInfo.MinPnlInitialValue = marketInfo.QuoteTotalBalance
-				marketInfo.TimeOfNextUTCDay = TimeOfNextUTCDay()
-			} else {
-				if time.Now().After(marketInfo.TimeOfNextUTCDay) {
-					marketInfo.MinPnlInitialValue = marketInfo.QuoteTotalBalance
-					if marketInfo.StopStrategyForDay { // restart the strategy
-						marketInfo.StopStrategyForDay = false
-					}
-				}
-			}
-
-			if getAccountErr {
-				continue
-			}
+			scale := decimal.NewFromInt(1)
+			// strategy part, need to calculate the staking window.
+			marketInfo.CalVolatility(scale)
+			marketInfo.ReservationPriceAndSpread()
+			bestAskPrice := getPriceForDerivative(marketInfo.BestAsk, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
+			bestBidPrice := getPriceForDerivative(marketInfo.BestBid, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
 
 			bidLen := marketInfo.GetBidOrdersLen()
 			askLen := marketInfo.GetAskOrdersLen()
 
-			// risk control part
-			if marketInfo.StopStrategy { // if triggered, stop strategy for 10 min
-				if time.Now().After(marketInfo.StopStrategyCountDown.Add(time.Second * time.Duration(s.historySec))) {
-					marketInfo.StopStrategy = false
-				} else {
-					s.CancelAllOrders(sender, marketInfo, &ErrCh)
-					time.Sleep(time.Second * 10)
-					continue
+			if time.Now().After(printOrdersTime.Add(time.Second*5)) && marketInfo.IsOrderUpdated() {
+				var buffer bytes.Buffer
+				buffer.WriteString(marketInfo.Ticker)
+				buffer.WriteString(" having ")
+				buffer.WriteString(strconv.Itoa(bidLen))
+				buffer.WriteString(" BUY orders, ")
+				buffer.WriteString(strconv.Itoa(askLen))
+				buffer.WriteString(" SELL orders\n")
+				space := strings.Repeat(" ", 30)
+				buffer.WriteString(space)
+				buffer.WriteString("reservated diff: ")
+				diff := marketInfo.ReservedPrice.Sub(marketInfo.OraclePrice).Round(2)
+				buffer.WriteString(diff.String())
+				buffer.WriteString(", spread: ")
+				spread := marketInfo.BestAsk.Sub(marketInfo.BestBid).Div(marketInfo.BestBid).Mul(decimal.NewFromInt(100)).Round(4)
+				buffer.WriteString(spread.String())
+				buffer.WriteString("%,\n")
+				buffer.WriteString(space)
+				switch marketInfo.PositionDirection {
+				case "null":
+					buffer.WriteString("no position.")
+				default:
+					buffer.WriteString(marketInfo.PositionDirection)
+					buffer.WriteString(" ")
+					buffer.WriteString(marketInfo.PositionQty.String())
+					buffer.WriteString("(")
+					buffer.WriteString(marketInfo.MarginValue.Round(2).String())
+					buffer.WriteString("USD)")
 				}
-			}
-			if marketInfo.StopStrategyForDay {
-				s.CancelAllOrders(sender, marketInfo, &ErrCh)
-				time.Sleep(time.Second * 10)
-				continue
-			}
-			if time.Now().After(printOrdersTime.Add(time.Second * 5)) {
-				s.logger.Infof("%s spot market having %d BUY orders, %d SELL orders\n", marketInfo.Ticker, bidLen, askLen)
+				s.logger.Infoln(buffer.String())
 				printOrdersTime = time.Now()
 			}
-			//	if !Initial {
-			//		// if all the orders on one side got filled, we have to increase the market volatility for 10 mins
-			//		if askLen == 0 || bidLen == 0 {
-			//			rollBack = true
-			//			rollBackCountDown = time.Now()
-			//		}
-			//	}
-			//	if rollBack && time.Now().After(rollBackCountDown.Add(time.Second*time.Duration(s.historySec))) {
-			//		rollBack = false
-			//	}
-			// for staking window
-			//	scale := decimal.NewFromInt(1)
-			//	if rollBack {
-			//		scale = decimal.NewFromInt(2) // 2 times bigger
-			//	}
-
-			scale := decimal.NewFromInt(1)
-			// strategy part, need to calculate the staking window.
-			marketInfo.CalInventoryPCT()
-			marketInfo.CalVolatility(scale)
-			marketInfo.ReservationPriceAndSpread(scale)
-			bestAskPrice := getPrice(marketInfo.BestAsk, marketInfo.BaseDenomDecimals, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
-			bestBidPrice := getPrice(marketInfo.BestBid, marketInfo.BaseDenomDecimals, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
-			upperPrice := getPrice(marketInfo.UpperBound, marketInfo.BaseDenomDecimals, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
-			lowerPrice := getPrice(marketInfo.LowerBound, marketInfo.BaseDenomDecimals, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
-
-			bidLen = marketInfo.GetBidOrdersLen()
-			askLen = marketInfo.GetAskOrdersLen()
-			bidOrdersmsgs := make([]cosmtypes.Msg, 0, s.spotSideCount)
-			askOrdersmsgs := make([]cosmtypes.Msg, 0, s.spotSideCount)
-			bidCancelmsgs := make([]cosmtypes.Msg, 0, 10)
-			askCancelmsgs := make([]cosmtypes.Msg, 0, 10)
 
 			// best limit order part
+			bidOrdersmsgs := make([]exchangetypes.DerivativeOrder, 0, 1)
+			askOrdersmsgs := make([]exchangetypes.DerivativeOrder, 0, 1)
 			oldBidOrder := marketInfo.GetBidOrder(0)
 			oldAskOrder := marketInfo.GetAskOrder(0)
 
 			// cancel ladder limit order part
+			bidCancelmsgs := make([]exchangetypes.OrderData, 0, 10)
+			askCancelmsgs := make([]exchangetypes.OrderData, 0, 10)
+
 			if bidLen > 0 {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					var canceledOrders []*spotExchangePB.SpotLimitOrder
-					if bidLen > s.spotSideCount { // if order num is more than limit, cancel from outside
-						canceledOrders = marketInfo.GetNewBidOrdersFromReduce(s)
-						for _, order := range canceledOrders {
-							msg := &exchangetypes.MsgCancelSpotOrder{
-								Sender:       sender.String(),
-								MarketId:     m.MarketId,
-								SubaccountId: subaccountID.Hex(),
-								OrderHash:    order.OrderHash,
-							}
-							bidCancelmsgs = append(bidCancelmsgs, msg)
+					var canceledOrders []*derivativeExchangePB.DerivativeLimitOrder
+					for _, order := range canceledOrders {
+						data := exchangetypes.OrderData{
+							MarketId:     m.MarketId,
+							SubaccountId: subaccountID.Hex(),
+							OrderHash:    order.OrderHash,
 						}
+						bidCancelmsgs = append(bidCancelmsgs, data)
 					}
 					marketInfo.BidOrders.mux.RLock()
 					for _, order := range marketInfo.BidOrders.Orders { // if the order is out of the window, cancel it
 						orderPrice := cosmtypes.MustNewDecFromStr(order.Price)
-						if orderPrice.LT(lowerPrice) || orderPrice.GT(bestBidPrice) || orderPrice.GTE(bestAskPrice) {
-							msg := &exchangetypes.MsgCancelSpotOrder{
-								Sender:       sender.String(),
+						if orderPrice.LT(bestBidPrice.Sub(buffTickLevel)) || orderPrice.Add(marketInfo.MinPriceTickSize).GT(bestBidPrice) || orderPrice.Add(buffTickLevel).GTE(bestAskPrice) {
+							data := exchangetypes.OrderData{
 								MarketId:     m.MarketId,
 								SubaccountId: subaccountID.Hex(),
 								OrderHash:    order.OrderHash,
 							}
-							bidCancelmsgs = append(bidCancelmsgs, msg)
+							bidCancelmsgs = append(bidCancelmsgs, data)
 							canceledOrders = append(canceledOrders, order)
 						}
 					}
@@ -245,30 +145,25 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *spotExchangePB.Spo
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					var canceledOrders []*spotExchangePB.SpotLimitOrder
-					if askLen > s.spotSideCount { // if order num is more than limit, cancel from outside
-						canceledOrders = marketInfo.GetNewAskOrdersFromReduce(s)
-						for _, order := range canceledOrders {
-							msg := &exchangetypes.MsgCancelSpotOrder{
-								Sender:       sender.String(),
-								MarketId:     m.MarketId,
-								SubaccountId: subaccountID.Hex(),
-								OrderHash:    order.OrderHash,
-							}
-							askCancelmsgs = append(askCancelmsgs, msg)
+					var canceledOrders []*derivativeExchangePB.DerivativeLimitOrder
+					for _, order := range canceledOrders {
+						data := exchangetypes.OrderData{
+							MarketId:     m.MarketId,
+							SubaccountId: subaccountID.Hex(),
+							OrderHash:    order.OrderHash,
 						}
+						askCancelmsgs = append(askCancelmsgs, data)
 					}
 					marketInfo.AskOrders.mux.Lock()
 					for _, order := range marketInfo.AskOrders.Orders {
 						orderPrice := cosmtypes.MustNewDecFromStr(order.Price)
-						if orderPrice.GT(upperPrice) && orderPrice.LT(bestAskPrice) || orderPrice.LTE(bestBidPrice) {
-							msg := &exchangetypes.MsgCancelSpotOrder{
-								Sender:       sender.String(),
+						if orderPrice.GT(bestAskPrice.Add(buffTickLevel)) && orderPrice.Sub(marketInfo.MinPriceTickSize).LT(bestAskPrice) || orderPrice.Sub(buffTickLevel).LTE(bestBidPrice) {
+							data := exchangetypes.OrderData{
 								MarketId:     m.MarketId,
 								SubaccountId: subaccountID.Hex(),
 								OrderHash:    order.OrderHash,
 							}
-							askCancelmsgs = append(askCancelmsgs, msg)
+							askCancelmsgs = append(askCancelmsgs, data)
 							canceledOrders = append(canceledOrders, order)
 						}
 					}
@@ -279,31 +174,48 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *spotExchangePB.Spo
 			wg.Wait()
 
 			// cancel orders part
-			cancelOrderMsgs := make([]cosmtypes.Msg, 0, 10)
-
+			cancelOrderMsgs := &exchangetypes.MsgBatchCancelDerivativeOrders{
+				Sender: sender.String(),
+			}
 			var allCanceledOrders int
 			bidCancelLen := len(bidCancelmsgs)
 			if bidCancelLen != 0 {
-				cancelOrderMsgs = append(cancelOrderMsgs, bidCancelmsgs...)
+				cancelOrderMsgs.Data = append(cancelOrderMsgs.Data, bidCancelmsgs...)
 				allCanceledOrders += bidCancelLen
 			}
 			askCancelLen := len(askCancelmsgs)
 			if askCancelLen != 0 {
-				cancelOrderMsgs = append(cancelOrderMsgs, askCancelmsgs...)
+				cancelOrderMsgs.Data = append(cancelOrderMsgs.Data, askCancelmsgs...)
 				allCanceledOrders += askCancelLen
+
 			}
 
 			if allCanceledOrders != 0 {
+				if !marketInfo.IsOrderUpdated() {
+					if Initial {
+						Initial = false
+					}
+					time.Sleep(time.Millisecond * s.dataCenter.UpdateInterval)
+					continue
+				}
 				s.HandleRequestMsgs(
 					"cancel",
 					allCanceledOrders,
 					cancelOrderMsgs,
 					marketInfo,
-					&ErrCh,
 				)
 				// cancel first then place orders
-				time.Sleep(time.Second * s.dataCenter.UpdateInterval)
-				Initial = false
+				if Initial {
+					Initial = false
+				}
+				time.Sleep(time.Millisecond * s.dataCenter.UpdateInterval)
+				continue
+			}
+
+			if err := s.GetTopOfBook(ctx, m, marketInfo); err != nil {
+				message := fmt.Sprintf("Wait 5 sec for getting injective orderbook")
+				s.logger.Errorln(message)
+				time.Sleep(time.Second * 5)
 				continue
 			}
 
@@ -316,30 +228,33 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *spotExchangePB.Spo
 				defer wg.Done()
 				// best bid
 				var Updating bool = false
-				orderSize, placeOrder := s.getCorrectOrderSize(marketInfo, "buy", marketInfo.MaxOrderSize)
-				if bidLen == 0 {
+				bidLen = marketInfo.GetBidOrdersLen()
+				switch {
+				case bidLen == 0:
 					Updating = true
-				} else {
+				default:
 					oldBestPrice := cosmtypes.MustNewDecFromStr(oldBidOrder.Price)
-					tickLevel := marketInfo.MinPriceTickSize.Mul(cosmtypes.NewDec(int64(s.bufferTicks)))
-					if bestBidPrice.GT(oldBestPrice.Add(tickLevel)) || bestBidPrice.LT(oldBestPrice) {
+					if bestBidPrice.GT(oldBestPrice.Add(buffTickLevel)) || bestBidPrice.LT(oldBestPrice) {
 						Updating = true
 					}
 				}
+				randNumQ := decimal.NewFromInt(int64(rand.Intn(40))).Add(decimal.NewFromInt(60)).Div(decimal.NewFromInt(100)) // 0.6~1
+				orderSize, placeOrder := s.getCorrectOrderSize(marketInfo, "buy", marketInfo.MaxOrderSize.Mul(randNumQ))
 				if Updating && placeOrder {
 					price := bestBidPrice
-					if marketInfo.CheckNewOrderIsSafe("buy", price, bestAskPrice, bestBidPrice, oldBidOrder, oldAskOrder) {
-						order := NewSpotOrder(subaccountID, marketInfo, &SpotOrderData{
+					uplimit := bestAskPrice
+					if marketInfo.CheckNewOrderIsSafe("buy", price, uplimit, bestBidPrice, oldBidOrder, oldAskOrder) {
+						if !marketInfo.TopAskPrice.IsZero() && price.GT(marketInfo.TopAskPrice) {
+							price = marketInfo.TopAskPrice
+						}
+						order := NewDerivativeOrder(subaccountID, marketInfo, &DerivativeOrderData{
 							OrderType:    1,
 							Price:        price,
 							Quantity:     orderSize,
+							Margin:       price.Mul(orderSize).Quo(cosmtypes.NewDec(int64(5))),
 							FeeRecipient: sender.String(),
 						})
-						msg := &exchangetypes.MsgCreateSpotLimitOrder{
-							Sender: sender.String(),
-							Order:  *order,
-						}
-						bidOrdersmsgs = append(bidOrdersmsgs, msg)
+						bidOrdersmsgs = append(bidOrdersmsgs, *order)
 						bidLen++
 					}
 				}
@@ -348,132 +263,73 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *spotExchangePB.Spo
 				defer wg.Done()
 				// best ask
 				var Updating bool = false
-				orderSize, placeOrder := s.getCorrectOrderSize(marketInfo, "sell", marketInfo.MaxOrderSize)
-				if askLen == 0 {
+				askLen = marketInfo.GetAskOrdersLen()
+				switch {
+				case askLen == 0:
 					Updating = true
-				} else {
+				default:
 					oldBestPrice := cosmtypes.MustNewDecFromStr(oldAskOrder.Price)
-					tickLevel := marketInfo.MinPriceTickSize.Mul(cosmtypes.NewDec(int64(s.bufferTicks)))
-					if bestAskPrice.GT(oldBestPrice) || bestAskPrice.LT(oldBestPrice.Sub(tickLevel)) {
+					if bestAskPrice.GT(oldBestPrice) || bestAskPrice.LT(oldBestPrice.Sub(buffTickLevel)) {
 						Updating = true
 					}
 				}
+				randNumQ := decimal.NewFromInt(int64(rand.Intn(40))).Add(decimal.NewFromInt(60)).Div(decimal.NewFromInt(100)) // 0.6~1
+				orderSize, placeOrder := s.getCorrectOrderSize(marketInfo, "sell", marketInfo.MaxOrderSize.Mul(randNumQ))
 				if Updating && placeOrder {
 					price := bestAskPrice
-					if marketInfo.CheckNewOrderIsSafe("sell", price, bestAskPrice, bestBidPrice, oldBidOrder, oldAskOrder) {
-						order := NewSpotOrder(subaccountID, marketInfo, &SpotOrderData{
+					lowlimit := bestBidPrice
+					if marketInfo.CheckNewOrderIsSafe("sell", price, bestAskPrice, lowlimit, oldBidOrder, oldAskOrder) {
+						if !marketInfo.TopBidPrice.IsZero() && price.LT(marketInfo.TopBidPrice) {
+							price = marketInfo.TopBidPrice
+						}
+						order := NewDerivativeOrder(subaccountID, marketInfo, &DerivativeOrderData{
 							OrderType:    2,
 							Price:        price,
 							Quantity:     orderSize,
+							Margin:       price.Mul(orderSize).Quo(cosmtypes.NewDec(int64(5))),
 							FeeRecipient: sender.String(),
 						})
-						msg := &exchangetypes.MsgCreateSpotLimitOrder{
-							Sender: sender.String(),
-							Order:  *order,
-						}
-						askOrdersmsgs = append(askOrdersmsgs, msg)
+						askOrdersmsgs = append(askOrdersmsgs, *order)
 						askLen++
 					}
 				}
 			}()
 			wg.Wait()
 
-			// ladder orders part
-			wg.Add(2)
-			go func() {
-				defer wg.Done()
-				var NumNeedToSend int
-				if bidLen == 0 {
-					return
-				}
-				if bidLen < s.spotSideCount {
-					NumNeedToSend = s.spotSideCount - bidLen
-				}
-				for idx := 1; idx <= NumNeedToSend; idx++ {
-					randNum := decimal.NewFromInt(int64(rand.Intn(80))).Add(decimal.NewFromInt(20)).Div(decimal.NewFromInt(100))  // 0.2~1
-					randNumQ := decimal.NewFromInt(int64(rand.Intn(40))).Add(decimal.NewFromInt(60)).Div(decimal.NewFromInt(100)) // 0.6~1
-					thickness := marketInfo.BestBid.Sub(marketInfo.LowerBound)
-					differ := thickness.Mul(randNum)
-					scaledPrice := marketInfo.BestBid.Sub(differ)
-					orderSize, placeOrder := s.getCorrectOrderSize(marketInfo, "buy", marketInfo.MaxOrderSize.Mul(randNumQ))
-					price := getPrice(scaledPrice, marketInfo.BaseDenomDecimals, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
-					if placeOrder && marketInfo.CheckNewOrderIsSafe("buy", price, bestAskPrice, bestBidPrice, oldBidOrder, oldAskOrder) {
-						order := NewSpotOrder(subaccountID, marketInfo, &SpotOrderData{
-							OrderType:    1,
-							Price:        price,
-							Quantity:     orderSize,
-							FeeRecipient: sender.String(),
-						})
-						msg := &exchangetypes.MsgCreateSpotLimitOrder{
-							Sender: sender.String(),
-							Order:  *order,
-						}
-						bidOrdersmsgs = append(bidOrdersmsgs, msg)
-					}
-				}
-			}()
-			go func() {
-				defer wg.Done()
-				var NumNeedToSend int
-				if askLen == 0 {
-					return
-				}
-				if askLen < s.spotSideCount {
-					NumNeedToSend = s.spotSideCount - askLen
-				}
-				for idx := 1; idx <= NumNeedToSend; idx++ {
-					randNum := decimal.NewFromInt(int64(rand.Intn(80))).Add(decimal.NewFromInt(20)).Div(decimal.NewFromInt(100))  // 0.2~1
-					randNumQ := decimal.NewFromInt(int64(rand.Intn(40))).Add(decimal.NewFromInt(60)).Div(decimal.NewFromInt(100)) // 0.6~1
-					thickness := marketInfo.UpperBound.Sub(marketInfo.BestAsk)
-					differ := thickness.Mul(randNum)
-					scaledPrice := marketInfo.BestAsk.Add(differ)
-					orderSize, placeOrder := s.getCorrectOrderSize(marketInfo, "sell", marketInfo.MaxOrderSize.Mul(randNumQ))
-					price := getPrice(scaledPrice, marketInfo.BaseDenomDecimals, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
-					if placeOrder && marketInfo.CheckNewOrderIsSafe("sell", price, bestAskPrice, bestBidPrice, oldBidOrder, oldAskOrder) {
-						order := NewSpotOrder(subaccountID, marketInfo, &SpotOrderData{
-							OrderType:    2,
-							Price:        price,
-							Quantity:     orderSize,
-							FeeRecipient: sender.String(),
-						})
-						msg := &exchangetypes.MsgCreateSpotLimitOrder{
-							Sender: sender.String(),
-							Order:  *order,
-						}
-						askOrdersmsgs = append(askOrdersmsgs, msg)
-					}
-				}
-			}()
-			wg.Wait()
-
-			// place orders part
-			if s.appDown {
-				// exit directly without place any order
-				return
+			ordermsgs := &exchangetypes.MsgBatchCreateDerivativeLimitOrders{
+				Sender: sender.String(),
 			}
-			ordermsgs := make([]cosmtypes.Msg, 0, s.spotSideCount*2)
 			var allOrdersLen int
 			bidOrdersLen := len(bidOrdersmsgs)
 			if bidOrdersLen != 0 {
-				ordermsgs = append(ordermsgs, bidOrdersmsgs...)
+				ordermsgs.Orders = append(ordermsgs.Orders, bidOrdersmsgs...)
 				allOrdersLen += bidOrdersLen
 			}
 			askOrdersLen := len(askOrdersmsgs)
 			if askOrdersLen != 0 {
-				ordermsgs = append(ordermsgs, askOrdersmsgs...)
+				ordermsgs.Orders = append(ordermsgs.Orders, askOrdersmsgs...)
 				allOrdersLen += askOrdersLen
 			}
+			if allOrdersLen != 0 {
+				if !marketInfo.IsOrderUpdated() {
+					if Initial {
+						Initial = false
+					}
+					time.Sleep(time.Millisecond * s.dataCenter.UpdateInterval)
+					continue
+				}
+				s.HandleRequestMsgs(
+					"post",
+					allOrdersLen,
+					ordermsgs,
+					marketInfo,
+				)
+			}
 
-			s.HandleRequestMsgs(
-				"post",
-				allOrdersLen,
-				ordermsgs,
-				marketInfo,
-				&ErrCh,
-			)
-
-			Initial = false
-			time.Sleep(time.Second * s.dataCenter.UpdateInterval)
+			if Initial {
+				Initial = false
+			}
+			time.Sleep(time.Millisecond * s.dataCenter.UpdateInterval)
 		}
 	}
 }
