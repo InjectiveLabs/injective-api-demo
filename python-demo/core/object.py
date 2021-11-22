@@ -60,6 +60,7 @@ class TradeData(object):
         self.trade_direction = ""
         self.execution_margin = 0
         self.executed_time = 0
+        self.curr_time = None
 
 
 @dataclass

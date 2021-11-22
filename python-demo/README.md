@@ -1,16 +1,12 @@
 # python _sdk_demo
 
-| Time       | Author | Email                        |
-| ---------- | ------ | ---------------------------- |
-| 2021-07-20 | QIU    | kaitao@injectiveprotocol.com |
-
 [toc]
 
 ## Prerequisite
 
 python 3.7+
 
-pyinjective v0.4.2
+pyinjective v0.5.1+
 
 ### Install injective python_sdk package
 
@@ -18,7 +14,14 @@ pyinjective v0.4.2
 pip install injective-py
 ```
 
-You could find more infomation about injective-py in https://pypi.org/project/injective-py/ or read source code from https://github.com/InjectiveLabs/sdk-python
+You could find more infomation about injective-py in https://pypi.org/project/injective-py/
+
+If the latest package is not uploaded to pypi, you use the following commands to update `injective-py`
+
+```bash
+git clone https://github.com/InjectiveLabs/sdk-python.git
+python setup.py install
+```
 
 ## How to run demo
 
@@ -30,7 +33,7 @@ python start.py
 
 ## What does demo do
 
-Demo with default json setting is a simple **perpetual BTCUSDT** pure market-making strategy, which places one bid order and one ask order around midprice（`midprice = (bid_price_1+ask_price_1) / 2`), `placing_spread/mid_price` is fixed according to the value in configuration. And it will cancel and quote bid/ask order every `interval(default is 20)` seconds.
+Demo with default json setting is a simple **Perpetual BTCUSDT** pure market-making strategy, which places one bid order and one ask order around midprice（`midprice = (bid_price_1+ask_price_1) / 2`), `placing_spread/mid_price` is fixed according to the value in configuration. And it will cancel and quote bid/ask order every `interval(default is 20)` seconds. You can add more logic to manage inventory risk.
 
 ## Decimal
 

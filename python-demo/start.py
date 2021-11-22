@@ -15,11 +15,12 @@ if __name__ == "__main__":
         level=logging.DEBUG,
         format='%(asctime)s  %(filename)s : %(levelname)s  %(message)s',
         datefmt='%Y-%m-%d %A %H:%M:%S',
-        filename="./log/perp_log.log",
+        filename="./log/demo_log.log",
         filemode='a'
     )
 
     console = logging.StreamHandler()
+    # you can adjust logger level
     console.setLevel(logging.INFO)
     formatter = logging.Formatter(
         '%(asctime)s  %(filename)s : %(levelname)s  %(message)s')
@@ -33,7 +34,7 @@ if __name__ == "__main__":
     with open(config_path, "r") as file:
         config_dict = json.load(file)
     try:
-        Demo(config_dict)
+        Demo(config_dict, logging)
     except Exception as e:
         logging.CRITICAL(traceback.format_exc())
         logging.info("restarting program...")
