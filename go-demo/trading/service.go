@@ -11,7 +11,7 @@ import (
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
-	log "github.com/sirupsen/logrus"
+	log "github.com/xlab/suplog"
 
 	chainclient "github.com/InjectiveLabs/sdk-go/chain/client"
 	chaintypes "github.com/InjectiveLabs/sdk-go/chain/exchange/types"
@@ -22,7 +22,7 @@ import (
 	oraclePB "github.com/InjectiveLabs/sdk-go/exchange/oracle_rpc/pb"
 	spotExchangePB "github.com/InjectiveLabs/sdk-go/exchange/spot_exchange_rpc/pb"
 
-	"go-bot-demo/metrics"
+	"github.com/InjectiveLabs/injective-trading-bot/metrics"
 )
 
 const (
@@ -88,6 +88,8 @@ type tradingSvc struct {
 	injSymbols    []string
 	dataCenter    dataCenter
 	maxOrderValue []float64
+	bookSideCount []int
+	leverage      []int
 }
 
 func NewService(
@@ -99,8 +101,30 @@ func NewService(
 	spotsClient spotExchangePB.InjectiveSpotExchangeRPCClient,
 	derivativesClient derivativeExchangePB.InjectiveDerivativeExchangeRPCClient,
 	oracleClient oraclePB.InjectiveOracleRPCClient,
+	sendAlert bool,
+	historySec int,
 	injSymbols []string,
+	sendSelfOrder bool,
+	bufferTicks []int,
+	minPnlPct int,
+	maxDDPct int,
+	maxPositionMargin []float64,
 	maxOrderValue []float64,
+	bookSideCount []int,
+	minBookSideCount []int,
+	defaultVolPct []float64,
+	riskAversion []float64,
+	fillIndensity []float64,
+	leverage []int,
+	mysqlHost string,
+	mysqlUser string,
+	mysqlPwd string,
+	appName string,
+	cosmosGRPC []string,
+	tendermintRPC []string,
+	exchangeGRPC []string,
+	cosmosPrivKey string,
+	ip string,
 ) Service {
 	// set log time stamp formatter
 	formatter := &log.TextFormatter{
@@ -110,6 +134,9 @@ func NewService(
 	logger := log.New()
 	logger.SetFormatter(formatter)
 	logger.WithField("svc", "trading")
+	num := len(injSymbols)
+	online := make([]bool, num)
+	lastUpdate := make([]time.Time, num)
 	return &tradingSvc{
 		logger: *logger,
 		svcTags: metrics.Tags{
@@ -126,6 +153,8 @@ func NewService(
 		oracleClient:        oracleClient,
 		injSymbols:          injSymbols,
 		maxOrderValue:       maxOrderValue,
+		bookSideCount:       bookSideCount,
+		leverage:            leverage,
 	}
 }
 
@@ -175,6 +204,7 @@ func (s *tradingSvc) DepositAllBankBalances(ctx context.Context) {
 }
 
 func (s *tradingSvc) MarketMakeDerivativeMarkets(ctx context.Context) {
+	ErrCh := make(chan map[string]interface{}, 10)
 	s.dataCenter.UpdateInterval = 2000 // milli sec
 	// setting strategy
 	quotes := []string{"USDT"}
@@ -194,13 +224,13 @@ func (s *tradingSvc) MarketMakeDerivativeMarkets(ctx context.Context) {
 	s.InitialInjectiveAccountBalances(quotes, resp)
 	s.InitialInjAssetWithDenom(quotes, resp)
 
-	go s.UpdateInjectiveSpotAccountSession(ctx, accountCheckInterval)
+	go s.UpdateInjectiveSpotAccountSession(ctx, accountCheckInterval, &ErrCh)
 
 	if err := s.GetInjectivePositions(ctx); err != nil {
 		s.logger.Infof("Failed to get Injective positions")
 		return
 	}
-	go s.UpdateInjectivePositionSession(ctx, accountCheckInterval)
+	go s.UpdateInjectivePositionSession(ctx, accountCheckInterval, &ErrCh)
 
 	respDerivative, err := s.derivativesClient.Markets(ctx, &derivativeExchangePB.MarketsRequest{})
 	if err != nil || respDerivative == nil {
@@ -220,7 +250,7 @@ func (s *tradingSvc) MarketMakeDerivativeMarkets(ctx context.Context) {
 		}
 		for i, symbol := range s.injSymbols {
 			if symbol == adjTicker {
-				go s.SingleExchangeMM(ctx, market, i, accountCheckInterval)
+				go s.SingleExchangeMM(ctx, market, i, accountCheckInterval, &ErrCh)
 				strategyCount++
 			}
 		}

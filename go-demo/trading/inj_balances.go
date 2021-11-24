@@ -28,10 +28,12 @@ func (s *tradingSvc) UpdateInjectiveSpotAccountSession(ctx context.Context, inte
 				continue
 				continue
 			}
+			s.UpdateAccountLastUpdate()
 			s.UpdateInjectiveAccountBalances()
 			// recording usdt values
 			totalUSDT := s.GetInjectiveTotalQuoteBalance("USDT")
-			overallValue := totalUSDT
+			lockedValue := s.CalculateAllLockedMarginValue()
+			overallValue := totalUSDT.Add(lockedValue)
 			s.logger.Infof("MM strategy has %s USDT in total.", overallValue.Round(2).String())
 		default:
 			time.Sleep(time.Second)
