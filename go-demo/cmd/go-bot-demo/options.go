@@ -184,8 +184,7 @@ func initStatsdOptions(
 func initTradingOptions(
 	cmd *cli.Cmd,
 	injSymbols **[]string,
-	maxOrderValue **int,
-	bookSideCount **int,
+	maxOrderValue **[]float64,
 ) {
 	*injSymbols = cmd.Strings(cli.StringsOpt{
 		Name:   "injective-symbols",
@@ -199,12 +198,5 @@ func initTradingOptions(
 		Desc:   "max order value in usd",
 		EnvVar: "MAX_ORDER_VALUE_USD",
 		Value:  []float64{},
-	})
-
-	*bookSideCount = cmd.Ints(cli.IntsOpt{
-		Name:   "book-side-count",
-		Desc:   "how many order for each side",
-		EnvVar: "BOOK_SIDE_ORDER_COUNT",
-		Value:  []int{},
 	})
 }

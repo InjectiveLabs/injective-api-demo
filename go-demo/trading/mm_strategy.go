@@ -5,6 +5,8 @@ import (
 	"math"
 	"time"
 
+	derivativeExchangePB "github.com/InjectiveLabs/sdk-go/exchange/derivative_exchange_rpc/pb"
+	oraclePB "github.com/InjectiveLabs/sdk-go/exchange/oracle_rpc/pb"
 	cosmtypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/shopspring/decimal"
 )
@@ -48,8 +50,6 @@ func (marketInfo *DerivativeMarketInfo) OraclePriceSession(ctx context.Context, 
 func (m *DerivativeMarketInfo) ReservationPriceAndSpread() {
 	//r(s,t) = s - q * gamma * sigma**2 * (T-t)
 	//spread[t] = gamma * (sigma **2) + (2/gamma) * math.log(1 + (gamma/k))
-	defaultPCT := 0.02
-	windowPCT := decimal.NewFromFloat(defaultPCT)
 	T := 1.0 // T-t  set it 1 for 24hrs trading market, considering the risk more
 	dT := decimal.NewFromFloat(T)
 	dgamma := decimal.NewFromFloat(m.RiskAversion)
@@ -91,30 +91,12 @@ func (s *tradingSvc) RealTimeChecking(ctx context.Context, idx int, m *derivativ
 		marketInfo.PositionQty = decimal.NewFromInt(0)
 		marketInfo.PositionDirection = "null"
 		marketInfo.MarginValue = decimal.NewFromInt(0)
-		marketInfo.Pnl = decimal.NewFromInt(0)
 	default:
 		marketInfo.PositionQty, _ = decimal.NewFromString(position.Quantity)
 		scale := decimal.New(1, int32(-marketInfo.QuoteDenomDecimals))
 		marginCos, _ := decimal.NewFromString(position.Margin)
 		marketInfo.MarginValue = marginCos.Mul(scale)
 		marketInfo.PositionDirection = position.Direction
-
-		markPrice := marketInfo.OraclePrice
-		entryPriceStr, _ := decimal.NewFromString(position.EntryPrice)
-		entryPrice := entryPriceStr.Mul(scale)
-		switch marketInfo.PositionDirection {
-		case "long":
-			marketInfo.Pnl = markPrice.Sub(entryPrice).Mul(marketInfo.PositionQty)
-		case "short":
-			marketInfo.Pnl = entryPrice.Sub(markPrice).Mul(marketInfo.PositionQty)
-		}
-
-		// auto increase position margin
-		if marketInfo.Pnl.LessThan(decimal.NewFromInt(0)) && marketInfo.Pnl.Abs().GreaterThan(marketInfo.MarginValue.Mul(decimal.NewFromFloat(0.5))) {
-			scale := decimal.New(1, int32(marketInfo.QuoteDenomDecimals))
-			amount := marketInfo.MarginValue.Mul(decimal.NewFromFloat(0.2).Mul(scale))
-			go s.IncreasePositionMargin(amount, m)
-		}
 	}
 	marketInfo.CalInventoryPCT(marketInfo.MarginValue)
 }
