@@ -16,6 +16,8 @@ To set up the environment, you can check file **.env.example**.
 
 Once setting up the environment, change the file name from *.env.example* to **.env**
 
+Also, you will need private key from your wallet to fill up TRADING_COSMOS_PK in **.env** file
+
 Then 
 
 ```bash
@@ -40,6 +42,8 @@ The strategy logic is in mm_strategy.go
 Orders managing logic is in inj_orders_engine.go
 
 Injective stream data handling logic is in inj_stream.go
+
+Injective stream position handling logic is in inj_position.go
 
 Feel free to do adjustments to fit your own needs.
 

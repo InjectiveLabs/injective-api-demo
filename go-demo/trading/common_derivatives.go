@@ -52,7 +52,6 @@ type DerivativeMarketInfo struct {
 	CosmOraclePrice cosmtypes.Dec
 	MaxOrderSize    decimal.Decimal
 	MaxOrderValue   decimal.Decimal
-	Leverage        int
 	TopBidPrice     cosmtypes.Dec
 	TopAskPrice     cosmtypes.Dec
 
