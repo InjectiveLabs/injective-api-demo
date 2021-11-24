@@ -88,7 +88,11 @@ func (s *tradingSvc) HandleRequestMsgs(
 					buffer.WriteString(err.Error())
 					buffer.WriteString("\n")
 					message := buffer.String()
-					s.logger.Errorln(message)
+					e := make(map[string]interface{})
+					e["critical"] = true
+					e["count"] = true
+					e["message"] = message
+					(*ErrCh) <- e
 					marketInfo.LastSendMessageTime[messageIdx] = time.Now()
 				}
 			} else {
@@ -100,8 +104,10 @@ func (s *tradingSvc) HandleRequestMsgs(
 					buffer.WriteString(message)
 					if batch {
 						buffer.WriteString("orders with batch")
+						s.AddRequestCount(1)
 					} else {
 						buffer.WriteString("orders")
+						s.AddRequestCount(allRequests)
 					}
 					s.logger.Infoln(buffer.String())
 					// update order status
@@ -131,7 +137,11 @@ func (s *tradingSvc) HandleRequestMsgs(
 				buffer.WriteString(err.Error())
 				buffer.WriteString("\n")
 				message := buffer.String()
-				s.logger.Errorln(message)
+				e := make(map[string]interface{})
+				e["critical"] = true
+				e["count"] = true
+				e["message"] = message
+				(*ErrCh) <- e
 				marketInfo.LastSendMessageTime[messageIdx] = time.Now()
 			}
 		} else {
@@ -142,6 +152,7 @@ func (s *tradingSvc) HandleRequestMsgs(
 				message := fmt.Sprintf("🔥 posted %v ", allRequests)
 				buffer.WriteString(message)
 				buffer.WriteString("orders with batch")
+				s.AddRequestCount(1)
 				s.logger.Infoln(buffer.String())
 				// update order status
 				marketInfo.UpdateOrderMain(Add)
@@ -168,7 +179,11 @@ func (s *tradingSvc) HandleRequestMsgs(
 				buffer.WriteString(err.Error())
 				buffer.WriteString("\n")
 				message := buffer.String()
-				s.logger.Errorln(message)
+				e := make(map[string]interface{})
+				e["critical"] = true
+				e["count"] = true
+				e["message"] = message
+				(*ErrCh) <- e
 				marketInfo.LastSendMessageTime[messageIdx] = time.Now()
 			}
 		} else {
@@ -179,6 +194,7 @@ func (s *tradingSvc) HandleRequestMsgs(
 				message := fmt.Sprintf("🔥 cutted %v ", allRequests)
 				buffer.WriteString(message)
 				buffer.WriteString("orders with batch")
+				s.AddRequestCount(1)
 				s.logger.Infoln(buffer.String())
 				// update order status
 				marketInfo.UpdateOrderMain(Reduce)

@@ -16,7 +16,6 @@ import (
 	"github.com/tendermint/tendermint/libs/rand"
 )
 
-// default with 5x leverage
 func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchangePB.DerivativeMarketInfo, idx int, interval time.Duration) {
 	s.logger.Infof("✅ Start strategy for %s derivative market.", m.Ticker)
 	var Initial bool = true
@@ -28,6 +27,7 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 	marketInfo := DerivativeMarketToMarketInfo(m)
 	// set max order value from .env
 	marketInfo.MaxOrderValue = decimal.NewFromInt(int64(s.maxOrderValue[idx]))
+	marketInfo.Leverage = s.leverage[idx]
 
 	buffTickLevel := marketInfo.MinPriceTickSize.Mul(cosmtypes.NewDec(int64(10)))
 
@@ -38,6 +38,8 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 	//go s.StreamInjectiveDerivativeOrderSession(ctx, m, &subaccountID, marketInfo, ErrCh)
 	// inj stream position session
 	go s.StreamInjectiveDerivativePositionSession(ctx, m, &subaccountID, marketInfo)
+	// test order session, if the testing order is active
+	go s.SendTestOrder(ctx, marketInfo)
 	// inital orders snapshot first
 	//s.InitialOrderList(ctx, m, &subaccountID, marketInfo, ErrCh)
 	// oracle price session
@@ -61,7 +63,7 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 			scale := decimal.NewFromInt(1)
 			// strategy part, need to calculate the staking window.
 			marketInfo.CalVolatility(scale)
-			marketInfo.ReservationPriceAndSpread()
+			marketInfo.ReservationPriceAndSpread(scale, marketInfo.bidDodge, marketInfo.askDodge)
 			bestAskPrice := getPriceForDerivative(marketInfo.BestAsk, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
 			bestBidPrice := getPriceForDerivative(marketInfo.BestBid, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
 
@@ -95,15 +97,17 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 					buffer.WriteString(marketInfo.PositionQty.String())
 					buffer.WriteString("(")
 					buffer.WriteString(marketInfo.MarginValue.Round(2).String())
-					buffer.WriteString("USD)")
+					buffer.WriteString("USD), pnl: ")
+					buffer.WriteString(marketInfo.Pnl.Round(2).String())
+					buffer.WriteString("USD")
 				}
 				s.logger.Infoln(buffer.String())
 				printOrdersTime = time.Now()
 			}
 
 			// best limit order part
-			bidOrdersmsgs := make([]exchangetypes.DerivativeOrder, 0, 1)
-			askOrdersmsgs := make([]exchangetypes.DerivativeOrder, 0, 1)
+			bidOrdersmsgs := make([]exchangetypes.DerivativeOrder, 0, s.bookSideCount[idx])
+			askOrdersmsgs := make([]exchangetypes.DerivativeOrder, 0, s.bookSideCount[idx])
 			oldBidOrder := marketInfo.GetBidOrder(0)
 			oldAskOrder := marketInfo.GetAskOrder(0)
 
@@ -115,7 +119,7 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					var canceledOrders []*derivativeExchangePB.DerivativeLimitOrder
+					canceledOrders := marketInfo.GetNewBidOrdersFromReduce(s, idx)
 					for _, order := range canceledOrders {
 						data := exchangetypes.OrderData{
 							MarketId:     m.MarketId,
@@ -145,7 +149,7 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					var canceledOrders []*derivativeExchangePB.DerivativeLimitOrder
+					canceledOrders := marketInfo.GetNewAskOrdersFromReduce(s, idx)
 					for _, order := range canceledOrders {
 						data := exchangetypes.OrderData{
 							MarketId:     m.MarketId,
@@ -251,7 +255,7 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 							OrderType:    1,
 							Price:        price,
 							Quantity:     orderSize,
-							Margin:       price.Mul(orderSize).Quo(cosmtypes.NewDec(int64(5))),
+							Margin:       price.Mul(orderSize).Quo(cosmtypes.NewDec(int64(marketInfo.Leverage))),
 							FeeRecipient: sender.String(),
 						})
 						bidOrdersmsgs = append(bidOrdersmsgs, *order)
@@ -286,7 +290,7 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 							OrderType:    2,
 							Price:        price,
 							Quantity:     orderSize,
-							Margin:       price.Mul(orderSize).Quo(cosmtypes.NewDec(int64(5))),
+							Margin:       price.Mul(orderSize).Quo(cosmtypes.NewDec(int64(marketInfo.Leverage))),
 							FeeRecipient: sender.String(),
 						})
 						askOrdersmsgs = append(askOrdersmsgs, *order)
@@ -296,6 +300,11 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 			}()
 			wg.Wait()
 
+			// place orders part
+			if !s.GetAppOnlineStatus() {
+				// exit directly without place any order
+				return
+			}
 			ordermsgs := &exchangetypes.MsgBatchCreateDerivativeLimitOrders{
 				Sender: sender.String(),
 			}

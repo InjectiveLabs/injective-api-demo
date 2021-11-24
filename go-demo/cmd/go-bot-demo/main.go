@@ -10,7 +10,7 @@ import (
 	"go-bot-demo/version"
 )
 
-var app = cli.App("go-bot-demo", "Injective's Liquidator Bot.")
+var app = cli.App("injective-trading-bot", "Injective's Liquidator Bot.")
 
 var (
 	envName        *string

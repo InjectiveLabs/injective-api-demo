@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	derivativeExchangePB "github.com/InjectiveLabs/sdk-go/exchange/derivative_exchange_rpc/pb"
-	oraclePB "github.com/InjectiveLabs/sdk-go/exchange/oracle_rpc/pb"
 	cosmtypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/shopspring/decimal"
@@ -30,7 +28,7 @@ func (s *tradingSvc) StreamInjectiveDerivativeOrderSession(ctx context.Context, 
 			s.logger.Infof("Closing %s derivative order session.", m.Ticker)
 			return
 		default:
-			s.StreamInjectiveDerivativeOrder(ctx, m, subaccountID, marketInfo)
+			s.StreamInjectiveDerivativeOrder(ctx, m, subaccountID, marketInfo, ErrCh)
 			message := fmt.Sprintf("Reconnecting %s derivative StreamOrders...", m.Ticker)
 			s.logger.Errorln(message)
 		}
@@ -119,7 +117,7 @@ func (s *tradingSvc) StreamInjectiveDerivativeTradeSession(ctx context.Context, 
 			s.logger.Infof("Closing %s derivative trade session.", m.Ticker)
 			return
 		default:
-			s.StreamInjectiveDerivativeTrade(ctx, m, subaccountID, marketInfo)
+			s.StreamInjectiveDerivativeTrade(ctx, m, subaccountID, marketInfo, ErrCh)
 			message := fmt.Sprintf("Reconnecting %s derivative StreamTrades...", m.Ticker)
 			s.logger.Errorln(message)
 		}
@@ -149,7 +147,7 @@ func (s *tradingSvc) StreamInjectiveDerivativeTrade(ctx context.Context, m *deri
 				s.logger.Errorln(message)
 				return
 			}
-			go s.HandleTrades(m.Ticker, resp, marketInfo)
+			go s.HandleTrades(m.Ticker, resp, marketInfo, ErrCh)
 		}
 	}
 }
@@ -183,7 +181,7 @@ func (s *tradingSvc) StreamInjectiveDerivativePositionSession(ctx context.Contex
 			s.logger.Infof("Closing %s derivative position session.", m.Ticker)
 			return
 		default:
-			s.StreamInjectiveDerivativePositions(ctx, m, subaccountID, marketInfo)
+			s.StreamInjectiveDerivativePositions(ctx, m, subaccountID, marketInfo, ErrCh)
 			message := fmt.Sprintf("Reconnecting %s derivative StreamPositions...", m.Ticker)
 			s.logger.Errorln(message)
 		}
@@ -197,7 +195,14 @@ func (s *tradingSvc) StreamInjectiveDerivativePositions(ctx context.Context, m *
 	})
 	if err != nil {
 		message := fmt.Sprintf("Fail to connect derivative StreamPositions for %s with err: %s", m.Ticker, err.Error())
-		s.logger.Errorln(message)
+		e := make(map[string]interface{})
+		e["critical"] = true
+		e["count"] = true
+		if strings.Contains(err.Error(), "connection refused") {
+			e["reconnect"] = true
+		}
+		e["message"] = message
+		(*ErrCh) <- e
 		time.Sleep(time.Second * 10)
 		return
 	}

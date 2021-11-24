@@ -134,7 +134,7 @@ func (s *tradingSvc) IncreasePositionMargin(amount decimal.Decimal, m *derivativ
 		buffer.WriteString(m.Ticker)
 		buffer.WriteString(", probably not enough margin for the positions, go check it up!")
 		message := buffer.String()
-		s.logger.Errorln(message)
+		s.SendCritialAlertToDiscord(message)
 	} else {
 		s.logger.Infof("Increased position margin.")
 	}

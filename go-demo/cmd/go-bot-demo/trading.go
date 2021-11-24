@@ -57,7 +57,8 @@ func tradingCmd(cmd *cli.Cmd) {
 
 		// Trading parameters
 		injSymbols    *[]string
-		maxOrderValue *[]float64
+		maxOrderValue *int
+		bookSideCount *int
 	)
 
 	initCosmosOptions(
@@ -97,6 +98,7 @@ func tradingCmd(cmd *cli.Cmd) {
 		cmd,
 		&injSymbols,
 		&maxOrderValue,
+		&bookSideCount,
 	)
 
 	cmd.Action = func() {
@@ -180,6 +182,7 @@ func tradingCmd(cmd *cli.Cmd) {
 			oraclePB.NewInjectiveOracleRPCClient(exchangeConn),
 			*injSymbols,
 			*maxOrderValue,
+			*bookSideCount,
 		)
 		closer.Bind(func() {
 			svc.Close()

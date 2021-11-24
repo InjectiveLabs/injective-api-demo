@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	derivativeExchangePB "github.com/InjectiveLabs/sdk-go/exchange/derivative_exchange_rpc/pb"
 	cosmtypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/shopspring/decimal"
@@ -273,6 +272,32 @@ func (m *DerivativeMarketInfo) GetAskOrdersLen() (l int) {
 	return l
 }
 
+func (m *DerivativeMarketInfo) GetNewBidOrdersFromReduce(s *tradingSvc, idx int) (canceledOrders []*derivativeExchangePB.DerivativeLimitOrder) {
+	m.BidOrders.mux.Lock()
+	defer m.BidOrders.mux.Unlock()
+	bidLen := len(m.BidOrders.Orders)
+	if bidLen > s.bookSideCount[idx] {
+		extra := bidLen - s.bookSideCount[idx]
+		canceledOrders = m.BidOrders.Orders[bidLen-extra:]
+		newBidOrders := m.BidOrders.Orders[:s.bookSideCount[idx]]
+		m.BidOrders.Orders = newBidOrders
+	}
+	return canceledOrders
+}
+
+func (m *DerivativeMarketInfo) GetNewAskOrdersFromReduce(s *tradingSvc, idx int) (canceledOrders []*derivativeExchangePB.DerivativeLimitOrder) {
+	m.AskOrders.mux.Lock()
+	defer m.AskOrders.mux.Unlock()
+	askLen := len(m.AskOrders.Orders)
+	if askLen > s.bookSideCount[idx] {
+		extra := askLen - s.bookSideCount[idx]
+		canceledOrders = m.AskOrders.Orders[askLen-extra:]
+		newAskOrders := m.AskOrders.Orders[:s.bookSideCount[idx]]
+		m.AskOrders.Orders = newAskOrders
+	}
+	return canceledOrders
+}
+
 func (m *DerivativeMarketInfo) GetBidOrder(level int) (order *derivativeExchangePB.DerivativeLimitOrder) {
 	m.BidOrders.mux.RLock()
 	defer m.BidOrders.mux.RUnlock()
@@ -317,7 +342,7 @@ func (m *DerivativeMarketInfo) IsMyAskOrder(hash string) bool {
 	return false
 }
 
-func (s *tradingSvc) InitialOrderList(ctx context.Context, m *derivativeExchangePB.DerivativeMarketInfo, subaccountID *common.Hash, marketInfo *DerivativeMarketInfo) {
+func (s *tradingSvc) InitialOrderList(ctx context.Context, m *derivativeExchangePB.DerivativeMarketInfo, subaccountID *common.Hash, marketInfo *DerivativeMarketInfo, ErrCh *chan map[string]interface{}) {
 	var respOrders *derivativeExchangePB.OrdersResponse
 	respOrders, err := s.derivativesClient.Orders(ctx, &derivativeExchangePB.OrdersRequest{
 		SubaccountId: subaccountID.Hex(),
@@ -327,7 +352,14 @@ func (s *tradingSvc) InitialOrderList(ctx context.Context, m *derivativeExchange
 		messageIdx := 1
 		if time.Now().After(marketInfo.LastSendMessageTime[messageIdx].Add(time.Second * 600)) {
 			message := fmt.Sprintf("❌ Error while fetching %s spot orders: %s\n", m.Ticker, err.Error())
-			s.logger.Errorln(message)
+			e := make(map[string]interface{})
+			e["critical"] = true
+			e["count"] = true
+			if strings.Contains(err.Error(), "connection refused") {
+				e["reconnect"] = true
+			}
+			e["message"] = message
+			(*ErrCh) <- e
 			marketInfo.LastSendMessageTime[messageIdx] = time.Now()
 		}
 		return
@@ -349,7 +381,7 @@ func (s *tradingSvc) UpdateInjectiveOrderSession(ctx context.Context, m *derivat
 		case <-ctx.Done():
 			return
 		case <-OrderCheck.C:
-			s.InitialOrderList(ctx, m, subaccountID, marketInfo)
+			s.InitialOrderList(ctx, m, subaccountID, marketInfo, ErrCh)
 			s.logger.Infof("Updated Injective %s spot orders\n", m.Ticker)
 		default:
 			time.Sleep(time.Second)
