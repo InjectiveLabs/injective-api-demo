@@ -5,7 +5,7 @@ import traceback
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from strategy.simple_startegy import Demo
+from strategy.perp_simple_strategy import Demo
 from util.misc import restart_program
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))
