@@ -231,6 +231,8 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 				switch {
 				case bidLen == 0:
 					Updating = true
+				case bidLen == 2:
+					return
 				default:
 					oldBestPrice := cosmtypes.MustNewDecFromStr(oldBidOrder.Price)
 					if bestBidPrice.GT(oldBestPrice.Add(buffTickLevel)) || bestBidPrice.LT(oldBestPrice) {
@@ -266,6 +268,8 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 				switch {
 				case askLen == 0:
 					Updating = true
+				case askLen == 2:
+					return
 				default:
 					oldBestPrice := cosmtypes.MustNewDecFromStr(oldAskOrder.Price)
 					if bestAskPrice.GT(oldBestPrice) || bestAskPrice.LT(oldBestPrice.Sub(buffTickLevel)) {
