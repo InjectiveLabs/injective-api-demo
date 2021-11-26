@@ -41,7 +41,7 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 	//s.InitialOrderList(ctx, m, &subaccountID, marketInfo, ErrCh)
 	// oracle price session
 	go marketInfo.OraclePriceSession(ctx, idx, s, m)
-
+	time.Sleep(time.Second * 5)
 	for {
 		select {
 		case <-ctx.Done():

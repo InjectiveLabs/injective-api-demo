@@ -16,34 +16,32 @@ func (marketInfo *DerivativeMarketInfo) OraclePriceSession(ctx context.Context, 
 	marketInfo.OracleReady = false
 	oracleCheck := time.NewTicker(time.Second * 5)
 	defer oracleCheck.Stop()
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-oracleCheck.C:
-				if resp, err := s.oracleClient.Price(ctx, &oraclePB.PriceRequest{
-					BaseSymbol:  marketInfo.OracleBase,
-					QuoteSymbol: marketInfo.OracleQuote,
-					OracleType:  marketInfo.OracleType.String(),
-				}); err == nil {
-					oracle, err = decimal.NewFromString(resp.Price)
-					if err != nil {
-						oracle = decimal.NewFromInt(0)
-						continue
-					}
-					if !marketInfo.OracleReady {
-						marketInfo.OracleReady = true
-					}
-					go s.RealTimeChecking(ctx, idx, m, marketInfo)
-					marketInfo.OraclePrice = oracle
-					marketInfo.CosmOraclePrice = getPriceForDerivative(marketInfo.OraclePrice, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-oracleCheck.C:
+			if resp, err := s.oracleClient.Price(ctx, &oraclePB.PriceRequest{
+				BaseSymbol:  marketInfo.OracleBase,
+				QuoteSymbol: marketInfo.OracleQuote,
+				OracleType:  marketInfo.OracleType.String(),
+			}); err == nil {
+				oracle, err = decimal.NewFromString(resp.Price)
+				if err != nil {
+					oracle = decimal.NewFromInt(0)
+					continue
 				}
-			default:
-				time.Sleep(time.Second)
+				if !marketInfo.OracleReady {
+					marketInfo.OracleReady = true
+				}
+				go s.RealTimeChecking(ctx, idx, m, marketInfo)
+				marketInfo.OraclePrice = oracle
+				marketInfo.CosmOraclePrice = getPriceForDerivative(marketInfo.OraclePrice, marketInfo.QuoteDenomDecimals, marketInfo.MinPriceTickSize)
 			}
+		default:
+			time.Sleep(time.Second)
 		}
-	}()
+	}
 }
 
 // basic as model for market making
@@ -51,13 +49,15 @@ func (m *DerivativeMarketInfo) ReservationPriceAndSpread() {
 	//r(s,t) = s - q * gamma * sigma**2 * (T-t)
 	//spread[t] = gamma * (sigma **2) + (2/gamma) * math.log(1 + (gamma/k))
 	T := 1.0 // T-t  set it 1 for 24hrs trading market, considering the risk more
+	riskAversion := 0.01
+	fillIndensity := 2.0
 	dT := decimal.NewFromFloat(T)
-	dgamma := decimal.NewFromFloat(m.RiskAversion)
+	dgamma := decimal.NewFromFloat(riskAversion)
 	dsigma := m.MarketVolatility
 	sigma2 := dsigma.Pow(decimal.NewFromFloat(2))
 	m.ReservedPrice = m.OraclePrice.Sub(m.InventoryPCT.Mul(dgamma).Mul(sigma2).Mul(dT))
 
-	logpart := decimal.NewFromFloat(math.Log((1 + (m.RiskAversion / m.FillIndensity))))
+	logpart := decimal.NewFromFloat(math.Log((1 + (riskAversion / fillIndensity))))
 	first := dgamma.Mul(sigma2)
 	second := decimal.NewFromFloat(2).Div(dgamma)
 	m.OptSpread = first.Add(second.Mul(logpart))
