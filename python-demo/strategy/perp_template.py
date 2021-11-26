@@ -33,6 +33,10 @@ class PerpTemplate(object):
 
         self.priv_key = PrivateKey.from_hex(setting["priv_key"])
         self.pub_key = self.priv_key.to_public_key()
+        if setting["is_mainnet"] is False:
+            self.network = Network.testnet()
+        else:
+            self.network = Network.mainnet(node='sentry0')
         self.client = AsyncClient(self.network, insecure=True)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.get_address())
@@ -41,22 +45,19 @@ class PerpTemplate(object):
         # otherwise, you may not get the gas fee discount from api side.
         self.sender = self.fee_recipient = self.address.to_acc_bech32()
 
-        if setting["is_mainnet"] is False:
-            self.network = Network.testnet()
-        else:
-            self.network = Network.mainnet()
         self.composer = ProtoMsgComposer(network=self.network.string())
         # Note: market_id of same traidng pair for testnet and mainnet are different.
         # see more details from source code in injective-py
         self.market_id = setting["market_id"]
         self.is_trading = False
         self.active_orders = {}  # [order_hash: order_data]
+        self.tick = None
 
     async def test_connect(self):
         self.get_market()
 
     async def get_address(self):
-        self.address = await self.pub_key.to_address().init_num_seq(self.network.lcd_endpoint)
+        self.address = await self.pub_key.to_address().async_init_num_seq(self.network.lcd_endpoint)
 
     """ perp market relationed function"""
     async def get_market(self):
@@ -221,8 +222,8 @@ class PerpTemplate(object):
                     price_denom_to_real_multi[market_id], self.ticker_size)
 
             if position.position.margin != '':
-                position_data.margin = float(position.position.margin) *
-                price_denom_to_real_multi[market_id]
+                position_data.margin = float(
+                    position.position.margin) * price_denom_to_real_multi[market_id]
 
             if position.position.liquidation_price != '':
                 position_data.liquidation_price = round_to(
@@ -240,25 +241,25 @@ class PerpTemplate(object):
         async for balance in subaccount:
             await self.on_account_balance(balance)
 
-    def on_account(self, accountData):
+    async def on_account(self, accountData):
         pass
 
-    def on_trade(self, trade_data):
+    async def on_trade(self, trade_data):
         pass
 
-    def on_order(self, order_data):
+    async def on_order(self, order_data):
         pass
 
-    def on_tick(self, tick_data):
+    async def on_tick(self, tick_data):
         pass
 
-    def on_timer(self):
+    async def on_timer(self):
         pass
 
-    def on_position(self, position_data):
+    async def on_position(self, position_data):
         pass
 
-    def on_account_balance(self, account_balance):
+    async def on_account_balance(self, account_balance):
         pass
 
     async def on_open_orders(self, open_order_list):
