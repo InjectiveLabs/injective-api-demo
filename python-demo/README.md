@@ -6,13 +6,14 @@
 
 python 3.7+
 
-pyinjective v0.5.1+
+pyinjective (please install latest code in master branch from github, https://github.com/InjectiveLabs/sdk-python)
 
 ### Install injective python_sdk package
 
 ```bash
 pip install injective-py
 ```
+
 If you had problems while installing the injective python_sdk package, you should install the dependencies in
 https://ofek.dev/coincurve/
 
