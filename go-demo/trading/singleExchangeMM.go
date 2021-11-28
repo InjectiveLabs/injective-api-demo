@@ -28,7 +28,7 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 	// set max order value from .env
 	marketInfo.MaxOrderValue = decimal.NewFromInt(int64(s.maxOrderValue[idx]))
 
-	buffTickLevel := marketInfo.MinPriceTickSize.Mul(cosmtypes.NewDec(int64(10)))
+	buffTickLevel := marketInfo.MinPriceTickSize.Mul(cosmtypes.NewDec(int64(20)))
 
 	marketInfo.LastSendMessageTime = make([]time.Time, 4) // depends on how many critical alerts wanna send with 10 min interval
 	// inj stream trades session
@@ -115,18 +115,10 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 				go func() {
 					defer wg.Done()
 					var canceledOrders []*derivativeExchangePB.DerivativeLimitOrder
-					for _, order := range canceledOrders {
-						data := exchangetypes.OrderData{
-							MarketId:     m.MarketId,
-							SubaccountId: subaccountID.Hex(),
-							OrderHash:    order.OrderHash,
-						}
-						bidCancelmsgs = append(bidCancelmsgs, data)
-					}
 					marketInfo.BidOrders.mux.RLock()
 					for _, order := range marketInfo.BidOrders.Orders { // if the order is out of the window, cancel it
 						orderPrice := cosmtypes.MustNewDecFromStr(order.Price)
-						if orderPrice.LT(bestBidPrice.Sub(buffTickLevel)) || orderPrice.Add(marketInfo.MinPriceTickSize).GT(bestBidPrice) || orderPrice.Add(buffTickLevel).GTE(bestAskPrice) {
+						if orderPrice.LT(bestBidPrice.Sub(buffTickLevel)) || orderPrice.Add(marketInfo.MinPriceTickSize).GT(bestBidPrice) || orderPrice.Add(marketInfo.MinPriceTickSize).GTE(bestAskPrice) {
 							data := exchangetypes.OrderData{
 								MarketId:     m.MarketId,
 								SubaccountId: subaccountID.Hex(),
@@ -145,18 +137,10 @@ func (s *tradingSvc) SingleExchangeMM(ctx context.Context, m *derivativeExchange
 				go func() {
 					defer wg.Done()
 					var canceledOrders []*derivativeExchangePB.DerivativeLimitOrder
-					for _, order := range canceledOrders {
-						data := exchangetypes.OrderData{
-							MarketId:     m.MarketId,
-							SubaccountId: subaccountID.Hex(),
-							OrderHash:    order.OrderHash,
-						}
-						askCancelmsgs = append(askCancelmsgs, data)
-					}
 					marketInfo.AskOrders.mux.Lock()
 					for _, order := range marketInfo.AskOrders.Orders {
 						orderPrice := cosmtypes.MustNewDecFromStr(order.Price)
-						if orderPrice.GT(bestAskPrice.Add(buffTickLevel)) && orderPrice.Sub(marketInfo.MinPriceTickSize).LT(bestAskPrice) || orderPrice.Sub(buffTickLevel).LTE(bestBidPrice) {
+						if orderPrice.GT(bestAskPrice.Add(buffTickLevel)) && orderPrice.Sub(marketInfo.MinPriceTickSize).LT(bestAskPrice) || orderPrice.Sub(marketInfo.MinPriceTickSize).LTE(bestBidPrice) {
 							data := exchangetypes.OrderData{
 								MarketId:     m.MarketId,
 								SubaccountId: subaccountID.Hex(),
