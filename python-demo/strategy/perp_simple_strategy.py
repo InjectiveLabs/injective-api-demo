@@ -13,6 +13,7 @@ from pyinjective.composer import Composer as ProtoMsgComposer
 from pyinjective.transaction import Transaction
 from pyinjective.client import Client
 from util.constant import *
+import traceback
 
 
 class Demo(PerpTemplate):
@@ -57,6 +58,8 @@ class Demo(PerpTemplate):
         self.add_schedule()
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.get_init_position())
+        loop.run_until_complete(
+            self.get_open_orders(self.acc_id, self.market_id))
         self.tick = None
         self.msg_list = []
 
@@ -95,7 +98,7 @@ class Demo(PerpTemplate):
             self.logger.info("net position is zero")
             self.net_position = 0
 
-    def on_tick(self, tick_data: TickData):
+    async def on_tick(self, tick_data: TickData):
         self.tick = tick_data
 
     async def on_timer(self):
@@ -132,7 +135,7 @@ class Demo(PerpTemplate):
             sim_tx_raw_bytes = tx.get_tx_data(sim_sig, self.pub_key)
 
             # simulate tx
-            (sim_res, success) = self.client.simulate_tx(sim_tx_raw_bytes)
+            (sim_res, success) = await self.client.simulate_tx(sim_tx_raw_bytes)
             if not success:
                 self.logger.warning(
                     "simulation failed, simulation response:{}".format(sim_res))
@@ -149,7 +152,8 @@ class Demo(PerpTemplate):
                 amount=self.gas_price * gas_limit,
                 denom=self.network.fee_denom,
             )]
-            current_height = await self.client.get_latest_block().block.header.height
+            block = await self.client.get_latest_block()
+            current_height = block.block.header.height
             tx = tx.with_gas(gas_limit).with_fee(fee).with_memo(
                 "").with_timeout_height(current_height+50)
             sign_doc = tx.get_sign_doc(self.pub_key)
@@ -162,16 +166,25 @@ class Demo(PerpTemplate):
             self.logger.info(
                 "tx response: {}\n tx msg response:{}".format(res, res_msg))
 
-    def on_order(self, order_data: OrderData):
+    async def on_order(self, order_data: OrderData):
+        if order_data.state == "booked":
+            self.active_orders[order_data.order_hash] = order_data
+
+        if fabs(order_data.unfilled_quantity) < 1e-7 or order_data.state == "filled" or order_data.state == "canceled":
+            try:
+                self.active_orders.pop(order_data.order_hash)
+            except Exception as e:
+                self.logger.error(
+                    "unexcepted order hash, can't pop it from active orders. {}".format(e))
+                self.logger.error(traceback.format_exc())
+
+    async def on_account(self, account_data):
         pass
 
-    def on_account(self, account_data):
+    async def on_trade(self, trade_data):
         pass
 
-    def on_trade(self, trade_data):
-        pass
-
-    def on_position(self, position_data: PositionData):
+    async def on_position(self, position_data: PositionData):
         self.net_position = position_data.quantity if position_data.direction == "long" else - \
             position_data.quantity
 
@@ -191,7 +204,7 @@ class Demo(PerpTemplate):
         self.logger.info(
             "long {}btc @price{}".format(self.order_size, self.bid_price))
 
-        self.msg_list.append(ProtoMsgComposer.MsgCreateDerivativeLimitOrder(
+        self.msg_list.append(self.composer.MsgCreateDerivativeLimitOrder(
             market_id=self.market_id,
             sender=self.sender,
             subaccount_id=self.acc_id,
