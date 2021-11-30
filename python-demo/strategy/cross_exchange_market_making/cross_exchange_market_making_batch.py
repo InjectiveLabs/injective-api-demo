@@ -8,8 +8,9 @@ from asyncio import Queue, sleep, gather, ensure_future, run
 from hashlib import sha256
 from time import time
 from hmac import new
-from aiohttp import (TCPConnector, ClientSession)
-#from decouple import config as env_config
+from aiohttp import TCPConnector, ClientSession
+
+# from decouple import config as env_config
 
 
 from pyinjective.async_client import AsyncClient
@@ -39,7 +40,7 @@ class Strategy(ABC):
         pass
 
     @abstractmethod
-    async def place_orders(self): 
+    async def place_orders(self):
         pass
 
     @abstractmethod
@@ -55,11 +56,10 @@ class InjectiveSpotStrategy(Strategy):
         config: ConfigParser,
         network: Network,
         fee_recipient: str,
-        private_key:str,
-        min_base_balance:float= 10,
-        min_quote_balance:float=10,
-        min_order_size:float=1
-
+        private_key: str,
+        min_base_balance: float = 10,
+        min_quote_balance: float = 10,
+        min_order_size: float = 1,
     ):
         self._base = base if base != "eth" else "weth"
         self._quote = quote
@@ -80,8 +80,8 @@ class InjectiveSpotStrategy(Strategy):
         self._subaccount_id = self._address.get_subaccount_id(index=0)
         self._orders = Queue(maxsize=20)
 
-        self._base_balance = 0# placeholder  
-        self._quote_balance = 0# placeholder
+        self._base_balance = 0  # placeholder
+        self._quote_balance = 0  # placeholder
         self._min_order_size = min_order_size
         self._state = State.BOTH
         self._min_base_balance = min_base_balance
@@ -89,8 +89,9 @@ class InjectiveSpotStrategy(Strategy):
         # self._placed_orders = {}
 
         self._base_asset_multiplier = get_base_asset_multiplier(self._market_id, config)
-        self._quote_asset_multiplier = get_quote_asset_multiplier(self._market_id, config)
-
+        self._quote_asset_multiplier = get_quote_asset_multiplier(
+            self._market_id, config
+        )
 
         # [binance_best_bid_price, binance_best_ask_price, injective_best_bid_price, injective_best_ask_price]
         self._prices = [0.0, 0.0, 0.0, 0.0]
@@ -142,14 +143,23 @@ class InjectiveSpotStrategy(Strategy):
             pass
 
     async def get_base_asset_balance(self):
-        balance = await self._client.get_subaccount_balance(subaccount_id=self._subaccount_id, denom=self._base)
-        self._base_balance = float(Decimal(balance.balance.deposit.available_balance) / 10**self._base_asset_multiplier)
-
+        balance = await self._client.get_subaccount_balance(
+            subaccount_id=self._subaccount_id, denom=self._base
+        )
+        self._base_balance = float(
+            Decimal(balance.balance.deposit.available_balance)
+            / 10 ** self._base_asset_multiplier
+        )
 
     async def get_quote_asset_balance(self):
-        balance = await self._client.get_subaccount_balance(subaccount_id=self._subaccount_id, denom="peggy0x69efCB62D98f4a6ff5a0b0CFaa4AAbB122e85e08")
-        self._quote_balance = float(Decimal(balance.balance.deposit.available_balance)/10**self._quote_asset_multiplier)
-
+        balance = await self._client.get_subaccount_balance(
+            subaccount_id=self._subaccount_id,
+            denom="peggy0x69efCB62D98f4a6ff5a0b0CFaa4AAbB122e85e08",
+        )
+        self._quote_balance = float(
+            Decimal(balance.balance.deposit.available_balance)
+            / 10 ** self._quote_asset_multiplier
+        )
 
     async def place_and_replace_orders(self):
         print("start place orders is running")
@@ -166,7 +176,10 @@ class InjectiveSpotStrategy(Strategy):
             if self._state == State.BOTH:
                 # sufficient balance in base asset and quote asset, place two orders
                 if (self._prices != self._prev_prices) and (0 not in self._prices):
-                    if self._base_balance <= self._min_base_balance and self._quote_balance <= self._min_quote_balance:
+                    if (
+                        self._base_balance <= self._min_base_balance
+                        and self._quote_balance <= self._min_quote_balance
+                    ):
                         self._state = State.NONE
                     elif self._base_balance <= self._min_base_balance:
                         self._state = State.BUY
@@ -174,8 +187,16 @@ class InjectiveSpotStrategy(Strategy):
                         self._state = State.SELL
                     else:
                         orders_list = [
-                            (round(self._prices[0] * 0.5, 2), self._min_order_size, True),
-                            (round(self._prices[1] * 2.0, 4), self._min_order_size, False),
+                            (
+                                round(self._prices[0] * 0.5, 2),
+                                self._min_order_size,
+                                True,
+                            ),
+                            (
+                                round(self._prices[1] * 2.0, 4),
+                                self._min_order_size,
+                                False,
+                            ),
                         ]
                         self._quote_balance -= self._min_order_size
                         self._base_balance -= self._min_order_size
@@ -199,23 +220,33 @@ class InjectiveSpotStrategy(Strategy):
                 self._base_balance -= self._min_order_size
             elif self._state == State.NONE:
                 # no enough balance to place orders, so we keep checking for changes in balance
-                if self._base_balance > self._min_base_balance and self._quote_balance >= self._min_quote_balance:
+                if (
+                    self._base_balance > self._min_base_balance
+                    and self._quote_balance >= self._min_quote_balance
+                ):
                     self._state = State.BOTH
-                elif self._base_balance <= self._min_base_balance and self._quote_balance > self._min_quote_balance:
+                elif (
+                    self._base_balance <= self._min_base_balance
+                    and self._quote_balance > self._min_quote_balance
+                ):
                     self._state = State.BUY
-                elif self._quote_balance <= self._min_quote_balance and self._base_balance > self._min_base_balance:
+                elif (
+                    self._quote_balance <= self._min_quote_balance
+                    and self._base_balance > self._min_base_balance
+                ):
                     self._state = State.SELL
                 else:
                     pass
-
-
 
     async def place_orders(self):
         print("start place orders is running")
         while True:
             if self._state == State.BOTH:
                 if (self._prices != self._prev_prices) and (0 not in self._prices):
-                    if self._base_balance <= self._min_base_balance and self._quote_balance <= self._min_quote_balance:
+                    if (
+                        self._base_balance <= self._min_base_balance
+                        and self._quote_balance <= self._min_quote_balance
+                    ):
                         self._state = State.NONE
                     elif self._base_balance <= self._min_base_balance:
                         self._state = State.BUY
@@ -223,8 +254,16 @@ class InjectiveSpotStrategy(Strategy):
                         self._state = State.SELL
                     else:
                         orders_list = [
-                            (round(self._prices[0] * 0.5, 2), self._min_order_size, True),
-                            (round(self._prices[1] * 2.0, 4), self._min_order_size, False),
+                            (
+                                round(self._prices[0] * 0.5, 2),
+                                self._min_order_size,
+                                True,
+                            ),
+                            (
+                                round(self._prices[1] * 2.0, 4),
+                                self._min_order_size,
+                                False,
+                            ),
                         ]
                         self._quote_balance -= self._min_order_size
                         self._base_balance -= self._min_order_size
@@ -247,9 +286,9 @@ class InjectiveSpotStrategy(Strategy):
             elif self._state == State.NONE:
                 if self._base_balance > 0 and self._quote_balance >= 0:
                     self._state = State.BOTH
-                elif self._base_balance <= 0 and self._quote_balance >0:
+                elif self._base_balance <= 0 and self._quote_balance > 0:
                     self._state = State.BUY
-                elif self._quote_balance <= 0 and self._base_balance>0:
+                elif self._quote_balance <= 0 and self._base_balance > 0:
                     self._state = State.SELL
                 else:
                     pass
@@ -537,7 +576,7 @@ class ExchangeClient(ABC):
 
 
 class InjectiveSpotClient(ExchangeClient):
-    def __init__(self, base: str, quote: str, config: ConfigParser, network:Network):
+    def __init__(self, base: str, quote: str, config: ConfigParser, network: Network):
         self._base = base if base != "eth" else "weth"
         self._quote = quote
         self._strategies = []
@@ -663,13 +702,16 @@ def get_quantity_multiplier(market_id: str, config: ConfigParser) -> Decimal:
     ) / Decimal(config[market_id]["min_quantity_tick_size"])
     return quantity_multiplier
 
+
 def get_base_asset_multiplier(market_id: str, config: ConfigParser) -> Decimal:
     price_multiplier = Decimal(config[market_id]["base"])
     return price_multiplier
 
+
 def get_quote_asset_multiplier(market_id: str, config: ConfigParser) -> Decimal:
     price_multiplier = Decimal(config[market_id]["quote"])
     return price_multiplier
+
 
 def get_market_id(base: str, quote: str, config: ConfigParser, is_spot=True) -> str:
 
@@ -693,17 +735,31 @@ def get_market_id(base: str, quote: str, config: ConfigParser, is_spot=True) -> 
     return markets["perp_" + base.lower() + "_" + quote.lower()]
 
 
-async def run_all(ini_config:ConfigParser, network:Network, inj_key:str, private_key:str, base:str, quote:str, min_base_asset_balance:float, min_quote_asset_balance:float,
-        min_order_size=float):
+async def run_all(
+    ini_config: ConfigParser,
+    network: Network,
+    inj_key: str,
+    private_key: str,
+    base: str,
+    quote: str,
+    min_base_asset_balance: float,
+    min_quote_asset_balance: float,
+    min_order_size=float,
+):
     """
     set up all clients
     """
-    injective_strategy = InjectiveSpotStrategy(base, quote, ini_config, network, fee_recipient=inj_key,
-                                               private_key=private_key,
-                                               min_base_balance=min_base_asset_balance,
-                                               min_quote_balance=min_quote_asset_balance,
-                                               min_order_size=min_order_size
-                                               )
+    injective_strategy = InjectiveSpotStrategy(
+        base,
+        quote,
+        ini_config,
+        network,
+        fee_recipient=inj_key,
+        private_key=private_key,
+        min_base_balance=min_base_asset_balance,
+        min_quote_balance=min_quote_asset_balance,
+        min_order_size=min_order_size,
+    )
     injective = InjectiveSpotClient(base, quote, ini_config, network)
     injective.attach(injective_strategy)
     binance = BinanceSpotClient(base, quote)
@@ -721,31 +777,37 @@ async def run_all(ini_config:ConfigParser, network:Network, inj_key:str, private
     await gather(*jobs)
 
 
-def run_cross_exchange_market_making(config):
+def run_cross_exchange_market_making(config, ini_config):
     """
     start the market maker strategy
     """
 
-    inj_key=config['inj_chain_addr']
-    private_key = config['private_key']
-    base= config['base_asset']
-    quote= config['quote_asset']
-    min_base_asset_balance= float(config['min_base_asset_balance'])
-    min_quote_asset_balance= float(config['min_quote_asset_balance'])
-    min_order_size = float(config['min_order_size'])
+    inj_key = config["inj_chain_addr"]
+    private_key = config["private_key"]
+    base = config["base_asset"]
+    quote = config["quote_asset"]
+    min_base_asset_balance = float(config["min_base_asset_balance"])
+    min_quote_asset_balance = float(config["min_quote_asset_balance"])
+    min_order_size = float(config["min_order_size"])
 
-    if config['is_mainnet']=='true':
+    if config["is_mainnet"] == "true":
         network = Network.mainnet()
     else:
         network = Network.testnet()
 
-    ini_config = ConfigParser()
-    ini_config.read("./denoms_mainnet.ini")
-
     if isinstance(inj_key, str) and isinstance(private_key, str):
-        run(run_all(ini_config, network, inj_key, private_key, base=base, quote=quote,
-            min_base_asset_balance=min_base_asset_balance, min_quote_asset_balance=min_quote_asset_balance, min_order_size=min_order_size))
+        run(
+            run_all(
+                ini_config,
+                network,
+                inj_key,
+                private_key,
+                base=base,
+                quote=quote,
+                min_base_asset_balance=min_base_asset_balance,
+                min_quote_asset_balance=min_quote_asset_balance,
+                min_order_size=min_order_size,
+            )
+        )
     else:
         print("Error in INJ KEY AND PRIVIATE KEY", type(inj_key), type(private_key))
-
-
