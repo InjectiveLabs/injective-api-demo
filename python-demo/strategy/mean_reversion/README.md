@@ -44,13 +44,13 @@ Mean reversion in trading theorizes that prices tend to return to average levels
 
 ## [How to generate trading signals?](https://www.investopedia.com/trading/using-bollinger-bands-to-gauge-trends/)
 1. Define a moving window with length of **n_window**.
-2. Calculate the mean and standard deviation within the moving window.
-3. Upper band/Lower band = mean +/- n_std * std
-4. When the Price go beyond the upper/lower band, sell/buy the coin to capture the mispricing opportunities.
-5. When the Price go down/up to the Mean, buy/sell the coin.
+2. Calculate the **mean** and **standard deviation** within the moving window.
+3. Upper band/Lower band = **mean +/- n_std * std**
+4. When the price **go beyond the upper/lower band**, sell/buy the coin to capture the mispricing opportunities.
+5. When the price **go down/up to the mean**, buy/sell the coin.
 6. Move the moving window forward and repeat 1~5. 
 
-**Strategy configs**
+**Strategy configs: configs.ini**
 
 | Parameter | Required| Description| Links|
 |:-------:|:-------:|:----------|:-----:|
