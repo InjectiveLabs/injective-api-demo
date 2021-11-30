@@ -1,4 +1,3 @@
-# Pure Perp Market Making Demo
 ## Prerequisite
 
 python 3.7+
@@ -22,7 +21,6 @@ If the latest package is not uploaded to pypi, you use the following commands to
 git clone https://github.com/InjectiveLabs/sdk-python.git
 python setup.py install
 ```
-
 ## Decimal
 
 One thing you may need to pay more attention to is how to deal with decimals in injective exchange. As we all known, different crypto currecies require diffrent decimal precisions. Separately, ERC-20 tokens (e.g. INJ) have decimals of 18 or another number (like 6 for USDT and USDC).  So in injective system that means **having 1 INJ is 1e18 inj** and that **1 USDT is actually 100000 peggy0xdac17f958d2ee523a2206206994597c13d831ec7**.
