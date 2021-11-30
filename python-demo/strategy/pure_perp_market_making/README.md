@@ -1,46 +1,35 @@
 # Pure Perp Market Making Demo
+## Prerequisite
 
-## What does cross exchange market marking demo do?
+python 3.7+
 
-This is a simplified InjectiveProtocol-Binance cross-exchange market strategy demo that compares TOB prices on Injective and Binance. 
+pyinjective (please install latest code in master branch from github, https://github.com/InjectiveLabs/sdk-python)
 
-A change in TOB prices will trigger the following actions:
-1. Cancel existing orders:
+### Install injective python_sdk package
 
-2. Placing new orders will be one of the following actions:
-	1. Places one bid order and one ask order on injective simultaneously, both base asset is greater than minimum base asset balance and quote asset is greater than minimum quote asset balance.
-	2. Only places one bid order, if the quote asset balance is greater than the minimum, and the base asset balance is smaller than the minimum base asset balance.
-	3. Only places one ask order, if the base asset balance is greater than the minimum, and the quote asset balance is smaller than the minimum quote asset balance.
-	4. Do not do anything.
+```bash
+pip install injective-py
+```
 
-## How to run demo
+If you had problems while installing the injective python_sdk package, you should install the dependencies in
+https://ofek.dev/coincurve/
 
-1. Modify values in `cross_exchange_market_making` in `python_demo/config/configs.ini`, 
+You could find more information about injective-py in https://pypi.org/project/injective-py/
 
-	[cross_exchange_market_making]
+If the latest package is not uploaded to pypi, you use the following commands to update `injective-py`
 
-	strategy_name: your strategy name
-
-	inj_key: input your injection key
-
-	private_key: input your private key
-
-	base_asset: base asset (e.g., "inj" in 'inj/usdt')
-
-	quote_asset: quote asset (e.g., "usdt" in 'inj/usdt')
-
-Modify environment value in `python_demo/config/configs.ini`, then
-
-	min_quote_asset_balance: your minimum base asset balance (e.g., 20)
-
-	min_order_size: minimum order size (e.g., 0.1, 1)
-
-	is_mainnet: use mainnet (e.g., false)
+```bash
+git clone https://github.com/InjectiveLabs/sdk-python.git
+python setup.py install
+```
+## Decimal
 
 
-2. `python start.py`
+One thing you may need to pay more attention to is how to deal with decimals in injective exchange. As we all known, different crypto currecies require diffrent decimal precisions. Separately, ERC-20 tokens (e.g. INJ) have decimals of 18 or another number (like 6 for USDT and USDC).  So in injective system that means **having 1 INJ is 1e18 inj** and that **1 USDT is actually 100000 peggy0xdac17f958d2ee523a2206206994597c13d831ec7**.
 
+For spot markets, a price reflects the **relative exchange rate** between two tokens. If the tokens have the same decimal scale, that's great since the prices become interpretable e.g. USDT/USDC (both have 6 decimals e.g. for USDT https://etherscan.io/address/0xdac17f958d2ee523a2206206994597c13d831ec7#readContract) or MATIC/INJ (both have 18 decimals) since the decimals cancel out.  Prices however start to look wonky once you have exchanges between two tokens of different decimals, which unfortunately is most pairs with USDT or USDC denominations.  As such, I've created some simple utility functions by keeping a hardcoded dictionary in injective-py and you can aslo achieve such utilities by yourself (e.g. you can use external API like Alchemy's getTokenMetadata to fetch decimal of base and quote asset).
 
+So for INJ/USDT of 6.9, the price you end up getting is 6.9*10^(6 - 18) = 6.9e-12.  Note that this market also happens to have a MinPriceTickSize of 1e-15. This makes sense since since it's defining the minimum price increment of the relative exchange of INJ to USDT.  Note that this market also happens to have a MinQuantityTickSize of 1e15. This also makes sense since it refers to the minimum INJ quantity tick size each order must have, which is 1e15/1e18 = 0.001 INJ.
 
 ## Suggestions
 
@@ -52,3 +41,4 @@ And there are a few suggestions on how to report demo or API  issues.
 2. open an issue from injective-exchange `injective_api_demo` directly and label these issues properly with (bugs, enhancement, features, etc), and mentioned `python_demo` in title.
 3. for each issue, please explain what is the issue, how to reproduce it, and present enough proofs (logs, screen shots, raw responses, etc)
 4. let's always go extra one mile when reporting any issues since developer will likely spend more time on fixing those.
+
