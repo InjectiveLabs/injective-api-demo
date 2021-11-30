@@ -294,6 +294,8 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         res_msg = self._composer.MsgResponses(res.data)
         print("tx response: ")
         print(res)
+        print("tx msg response")
+        print(res_msg)
         order_hash = res_msg[0].order_hash
         return order_hash
 
@@ -346,6 +348,8 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         res_msg = self._composer.MsgResponses(res.data)
         print("tx response: ")
         print(res)
+        print("tx msg response")
+        print(res_msg)
 
     async def trading(self):
         while True:
@@ -374,18 +378,17 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
 
 class EmaApiManager(InjectiveSpotStrategy):
     def __init__(self):
-        return NotImplemented
+        pass
 
 
 class EwmaApiManager(InjectiveSpotStrategy):
     def __init__(self):
-        return NotImplemented
-
+        pass
 
 if __name__ == '__main__':
     configs = ConfigParser()
     configs.read(os.path.join(_config_dir, "configs.ini"))
     print(configs.sections())
     print(_config_dir)
-    inj_manager = SmaSpotStrategy(configs=configs["mean_reversion"], logger=None)
+    inj_manager = SmaSpotStrategy(configs=configs["mean_reversion"])
     asyncio.get_event_loop().run_until_complete(inj_manager._place_mkt_orders(17, 0.01))
