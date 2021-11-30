@@ -1,4 +1,5 @@
-
+*my-configs.ini
+*/log
 *.json
 # injective folder
 */var/data/injective-888/

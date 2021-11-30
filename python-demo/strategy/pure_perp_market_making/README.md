@@ -1,4 +1,4 @@
-# python _sdk_demo
+# Pure Perp Market Making Demo
 
 [toc]
 
@@ -28,7 +28,7 @@ python setup.py install
 
 ## How to run demo
 
-Modify environment value in `./config/market_making_setting.json`, then
+Modify environment value in `python_demo/config/configs.ini`, then
 
 ```bash
 python start.py
@@ -57,21 +57,21 @@ And there are a few suggestions on how to report demo or API  issues.
 3. for each issue, please explain what is the issue, how to reproduce it, and present enough proofs (logs, screen shots, raw responses, etc)
 4. let's always go extra one mile when reporting any issues since developer will likely spend more time on fixing those.
 
-
 ## Cross Exchange Market Making Demo
 
 ### What does cross exchange market marking demo do?
 
-This is a simplified InjectiveProtocol-Binance cross-exchange market strategy demo that compares TOB prices on Injective and Binance. 
+This is a simplified InjectiveProtocol-Binance cross-exchange market strategy demo that compares TOB prices on Injective and Binance.
 
 A change in TOB prices will trigger the following actions:
-1. Cancel existing orders:
 
+1. Cancel existing orders:
 2. Placing new orders will be one of the following actions:
-	1. Places one bid order and one ask order on injective simultaneously, both base asset is greater than minimum base asset balance and quote asset is greater than minimum quote asset balance.
-	2. Only places one bid order, if the quote asset balance is greater than the minimum, and the base asset balance is smaller than the minimum base asset balance.
-	3. Only places one ask order, if the base asset balance is greater than the minimum, and the quote asset balance is smaller than the minimum quote asset balance.
-	4. Do not do anything.
+
+   1. Places one bid order and one ask order on injective simultaneously, both base asset is greater than minimum base asset balance and quote asset is greater than minimum quote asset balance.
+   2. Only places one bid order, if the quote asset balance is greater than the minimum, and the base asset balance is smaller than the minimum base asset balance.
+   3. Only places one ask order, if the base asset balance is greater than the minimum, and the quote asset balance is smaller than the minimum quote asset balance.
+   4. Do not do anything.
 
 ## How to run demo
 
@@ -97,8 +97,6 @@ min_order_size: minimum order size eg.0.1, 1
 
 is_mainnet=false
 
-
 ```bash
 python python-demo/strategy/cross_exchange_market_making_batch.py
 ```
-
