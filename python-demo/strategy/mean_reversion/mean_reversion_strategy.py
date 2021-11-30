@@ -16,8 +16,8 @@ from pyinjective.wallet import PrivateKey
 from .data_manager import SmaDataManager
 
 
-_main_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
+_config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),'config')
+print(_config_dir)
 
 class Strategy(ABC):
     """
@@ -82,12 +82,12 @@ class InjectiveSpotStrategy(Strategy):
 
         # get market_id from currency pair
         pairs = ConfigParser()
-        pairs.read(os.path.join(_main_dir, "pairs_to_market_id.ini"))
+        pairs.read(os.path.join(_config_dir, "pairs_to_market_id.ini"))
         self._market_id = pairs[f"Spot {self._pair}"]['market_id']
 
         # read network configs according to the market_id
         network_config = ConfigParser()
-        network_config.read(os.path.join(_main_dir, ini_filename))
+        network_config.read(os.path.join(_config_dir, ini_filename))
         self._description = network_config[self._market_id]['description']
         self._base_ = network_config[self._market_id]['base']
         self._quote_ = network_config[self._market_id]['quote']
@@ -384,8 +384,8 @@ class EwmaApiManager(InjectiveSpotStrategy):
 
 if __name__ == '__main__':
     configs = ConfigParser()
-    configs.read(os.path.join(os.path.join(os.path.join(_main_dir, "python-demo"), "config"), "configs.ini"))
+    configs.read(os.path.join(_config_dir, "configs.ini"))
     print(configs.sections())
-    print(_main_dir)
+    print(_config_dir)
     inj_manager = SmaSpotStrategy(configs=configs["mean_reversion"], logger=None)
     asyncio.get_event_loop().run_until_complete(inj_manager._place_mkt_orders(17, 0.01))
