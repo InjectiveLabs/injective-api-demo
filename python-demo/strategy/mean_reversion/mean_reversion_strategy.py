@@ -124,7 +124,6 @@ class InjectiveSpotStrategy(Strategy):
 
         """
         response = await self._client.get_spot_orderbook(market_id=self._market_id)
-        # print(response)
         best_ask = Decimal(response.orderbook.sells[0].price)
         best_ask_quantity = Decimal(response.orderbook.sells[0].quantity)
         best_bid = Decimal(response.orderbook.buys[0].price)
@@ -238,6 +237,8 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         res_msg = self._composer.MsgResponses(res.data)
         print("tx response")
         print(res)
+        print("tx msg response")
+        print(res_msg)
 
     async def _place_limit_orders(self, price: float, quantity: float, is_buy: bool = True):
         """
@@ -361,10 +362,12 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
                 signal = self._data_manager.generate_signal()
                 if -1 == signal:
                     print('Signal: Sell')
-                    await self._place_mkt_orders((best_bid + best_ask) / 2, self._order_size, is_buy=False)
+                    await self._place_mkt_orders(round((best_bid + best_ask) / 2 / 2, 3), self._order_size, is_buy=False)
                 elif 1 == signal:
                     print('Signal: Buy')
-                    await self._place_mkt_orders((best_bid + best_ask) / 2, self._order_size, is_buy=True)
+                    await self._place_mkt_orders(round((best_bid + best_ask) / 2 * 2, 3), self._order_size, is_buy=True)
+                else:
+                    print("No-signal: Hold")
             else:
                 print("Calculating Mean and Standard Deviation......")
 
