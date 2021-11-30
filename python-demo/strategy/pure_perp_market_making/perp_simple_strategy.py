@@ -1,5 +1,5 @@
 
-from strategy.perp_template import PerpTemplate
+from perp_template import PerpTemplate
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
@@ -35,15 +35,15 @@ class Demo(PerpTemplate):
         self.curr_duration_volume = 0
         self.last_duration_volume = 0
 
-        self.interval = self.setting["interval"]
+        self.interval = int(self.setting["interval"])
         self.active_orders = {}  # [order_hash, : order_data]
-        self.symbol = "BTCUSDT"
-        self.base_asset = "BTC"
-        self.quote_asset = "USDT"
+        self.symbol = self.setting["symbol"]
+        self.base_asset = self.setting["base_asset"]
+        self.quote_asset = self.setting["quote_asset"]
         self.quote_denom = denom_dict[self.quote_asset]
 
         self.leverage = float(self.setting["leverage"])
-        self.order_size = self.setting["order_size"]
+        self.order_size = float(self.setting["order_size"])
         self.spread_ratio = float(self.setting["spread_ratio"])
 
         self.gas_price = 500000000
@@ -103,6 +103,7 @@ class Demo(PerpTemplate):
 
     async def on_timer(self):
         if not self.tick:
+            print("fail to get tick data by stream orderbook")
             return
 
         await self.get_address()
