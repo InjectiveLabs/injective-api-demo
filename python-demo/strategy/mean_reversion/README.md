@@ -1,4 +1,11 @@
-# Pure Perp Market Making Demo
+# python _sdk_demo
+
+
+![](../../../logos/Logo_stacked_Brand_Black_with_space.png)
+
+
+[toc]
+
 ## Prerequisite
 
 python 3.7+
@@ -22,13 +29,40 @@ If the latest package is not uploaded to pypi, you use the following commands to
 git clone https://github.com/InjectiveLabs/sdk-python.git
 python setup.py install
 ```
+
 ## How to run demo
-Modify environment value in python_demo/config/configs.ini, then
 
+Modify environment value in `./config/configs.ini`, then
+
+```bash
 python start.py
-## What does demo do
-Demo with default json setting is a simple Perpetual BTCUSDT pure market-making strategy, which places one bid order and one ask order around midprice`(midprice = (bid_price_1+ask_price_1) / 2)`, `placing_spread/mid_price` is fixed according to the value in configuration. And it will cancel and quote bid/ask order every interval(default is 20) seconds. You can add more logic to manage inventory risk.
+```
 
+## [What does mean reversion strategy do?](https://www.cmcmarkets.com/en/trading-guides/mean-reversion)
+
+Mean reversion in trading theorizes that prices tend to return to average levels, and extreme price moves are hard to sustain for extended periods. Traders who partake in mean reversion trading have developed many methods for capitalising on the theory. In all cases, they are betting that an extreme level — whether it be volatility, price, growth, or a technical indicator — will return to the average.
+
+## [How to generate trading signals?](https://www.investopedia.com/trading/using-bollinger-bands-to-gauge-trends/)
+1. Define a moving window with length of **n_window**.
+2. Calculate the **mean** and **standard deviation** within the moving window.
+3. Upper band/Lower band = **mean +/- n_std * std**
+4. When the price **go beyond the upper/lower band**, sell/buy the coin to capture the mispricing opportunities.
+5. When the price **go down/up to the mean**, buy/sell the coin.
+6. Move the moving window forward and repeat 1~5. 
+
+**Strategy configs: configs.ini**
+
+| Parameter | Required| Description| Links|
+|:-------:|:-------:|:----------|:-----:|
+|strategy_name|True|name of the strategy||
+|private_key|True|input your private key||
+|is_mainnet|True|trading on mainnet or testnet||
+|base_asset|True|In INJ/USDT, INJ is the base_asset||
+|quote_asset|True|In INJ/USDT. USDT is the quote_asset||
+|interval_in_second|True|trading frequency measured in second|
+|n_window|True|the number of total period|[SMA](https://www.investopedia.com/terms/s/sma.asp)|
+|n_std|True|the number of standard deviations|[Bollinger Bands](https://www.investopedia.com/trading/using-bollinger-bands-to-gauge-trends/)|
+|order_size|True|the size of each orders||
 ## Decimal
 
 One thing you may need to pay more attention to is how to deal with decimals in injective exchange. As we all known, different crypto currecies require diffrent decimal precisions. Separately, ERC-20 tokens (e.g. INJ) have decimals of 18 or another number (like 6 for USDT and USDC).  So in injective system that means **having 1 INJ is 1e18 inj** and that **1 USDT is actually 100000 peggy0xdac17f958d2ee523a2206206994597c13d831ec7**.
@@ -47,4 +81,3 @@ And there are a few suggestions on how to report demo or API  issues.
 2. open an issue from injective-exchange `injective_api_demo` directly and label these issues properly with (bugs, enhancement, features, etc), and mentioned `python_demo` in title.
 3. for each issue, please explain what is the issue, how to reproduce it, and present enough proofs (logs, screen shots, raw responses, etc)
 4. let's always go extra one mile when reporting any issues since developer will likely spend more time on fixing those.
-
