@@ -22,6 +22,12 @@ If the latest package is not uploaded to pypi, you use the following commands to
 git clone https://github.com/InjectiveLabs/sdk-python.git
 python setup.py install
 ```
+## How to run demo
+Modify environment value in python_demo/config/configs.ini, then
+
+python start.py
+## What does demo do
+Demo with default json setting is a simple Perpetual BTCUSDT pure market-making strategy, which places one bid order and one ask order around midprice`(midprice = (bid_price_1+ask_price_1) / 2)`, `placing_spread/mid_price` is fixed according to the value in configuration. And it will cancel and quote bid/ask order every interval(default is 20) seconds. You can add more logic to manage inventory risk.
 
 ## Decimal
 
