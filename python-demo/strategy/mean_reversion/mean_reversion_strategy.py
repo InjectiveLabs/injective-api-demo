@@ -16,8 +16,8 @@ from pyinjective.wallet import PrivateKey
 from .data_manager import SmaDataManager
 
 
-_config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),'config')
-print(_config_dir)
+_config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'config')
+
 
 class Strategy(ABC):
     """
@@ -70,8 +70,7 @@ class InjectiveSpotStrategy(Strategy):
 
         print('Authorising......')
         # read and assign the credentials
-        self._fee_recipient = configs.get('fee_recipient')
-        self._inj_chain_addr = configs.get('inj_chain_addr')
+
         self._priv_key = PrivateKey.from_hex(configs['private_key'])
         self._pub_key = self._priv_key.to_public_key()
         loop = asyncio.get_event_loop()
@@ -80,21 +79,21 @@ class InjectiveSpotStrategy(Strategy):
         # get sub account id
         loop.run_until_complete(self._get_account_id())
 
-        # get market_id from currency pair
-        pairs = ConfigParser()
-        pairs.read(os.path.join(_config_dir, "pairs_to_market_id.ini"))
-        self._market_id = pairs[f"Spot {self._pair}"]['market_id']
-
         # read network configs according to the market_id
         network_config = ConfigParser()
         network_config.read(os.path.join(_config_dir, ini_filename))
-        self._description = network_config[self._market_id]['description']
-        self._base_ = network_config[self._market_id]['base']
-        self._quote_ = network_config[self._market_id]['quote']
-        min_price_tick_size = network_config[self._market_id]['min_price_tick_size']
-        min_display_price_tick_size = network_config[self._market_id]['min_display_price_tick_size']
-        min_quantity_tick_size = network_config[self._market_id]['min_quantity_tick_size']
-        min_display_quantity_tick_size = network_config[self._market_id]['min_display_quantity_tick_size']
+        for market_id in network_config.sections():
+            description = network_config[market_id].get('description')
+            if description and (description[9:-1] == f"Spot {self._pair}"):
+                self._market_id = market_id
+                self.description = description
+                self._base_ = network_config[self._market_id]['base']
+                self._quote_ = network_config[self._market_id]['quote']
+                min_price_tick_size = network_config[self._market_id]['min_price_tick_size']
+                min_display_price_tick_size = network_config[self._market_id]['min_display_price_tick_size']
+                min_quantity_tick_size = network_config[self._market_id]['min_quantity_tick_size']
+                min_display_quantity_tick_size = network_config[self._market_id]['min_display_quantity_tick_size']
+                break
 
         # set price and quantity multiplier for calculation
         self._price_multiplier = Decimal(min_price_tick_size) / Decimal(min_display_price_tick_size)
@@ -106,7 +105,9 @@ class InjectiveSpotStrategy(Strategy):
         Returns:
 
         """
-        self._eth_chain_addr = await self._pub_key.to_address().async_init_num_seq(self._network.lcd_endpoint)
+        self._address = await self._pub_key.to_address().async_init_num_seq(self._network.lcd_endpoint)
+        self._inj_chain_addr = self._address.to_acc_bech32()
+        self._fee_recipient = self._inj_chain_addr
 
     async def _get_account_id(self) -> None:
         """
@@ -196,7 +197,7 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         """
         # prepare transaction msg
         msg = self._composer.MsgCreateSpotMarketOrder(
-            sender=self._eth_chain_addr.to_acc_bech32(),
+            sender=self._address.to_acc_bech32(),
             market_id=self._market_id,
             subaccount_id=self._acct_id,
             fee_recipient=self._fee_recipient,
@@ -209,8 +210,8 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         tx = (
             Transaction()
             .with_messages(msg)
-            .with_sequence(self._eth_chain_addr.get_sequence())
-            .with_account_num(self._eth_chain_addr.get_number())
+            .with_sequence(self._address.get_sequence())
+            .with_account_num(self._address.get_number())
             .with_chain_id(self._network.chain_id)
         )
 
@@ -254,7 +255,7 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         """
         # prepare transaction msg
         msg = self._composer.MsgCreateSpotLimitOrder(
-            sender=self._eth_chain_addr.to_acc_bech32(),
+            sender=self._address.to_acc_bech32(),
             market_id=self._market_id,
             subaccount_id=self._acct_id,
             fee_recipient=self._fee_recipient,
@@ -267,8 +268,8 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         tx = (
             Transaction()
                 .with_messages(msg)
-                .with_sequence(self._eth_chain_addr.get_sequence())
-                .with_account_num(self._eth_chain_addr.get_number())
+                .with_sequence(self._address.get_sequence())
+                .with_account_num(self._address.get_number())
                 .with_chain_id(self._network.chain_id)
         )
 
@@ -322,8 +323,8 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         tx = (
             Transaction()
                 .with_messages(msg)
-                .with_sequence(self._eth_chain_addr.get_sequence())
-                .with_account_num(self._eth_chain_addr.get_number())
+                .with_sequence(self._address.get_sequence())
+                .with_account_num(self._address.get_number())
                 .with_chain_id(self._network.chain_id)
         )
         gas_used, sim_res_msg = await self._simulate_transaction(tx)
@@ -387,6 +388,7 @@ class EmaApiManager(InjectiveSpotStrategy):
 class EwmaApiManager(InjectiveSpotStrategy):
     def __init__(self):
         pass
+
 
 if __name__ == '__main__':
     configs = ConfigParser()

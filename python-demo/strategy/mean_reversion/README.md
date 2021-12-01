@@ -55,9 +55,7 @@ Mean reversion in trading theorizes that prices tend to return to average levels
 | Parameter | Required| Description| Links|
 |:-------:|:-------:|:----------|:-----:|
 |strategy_name|True|name of the strategy||
-|inj_chain_addr|True|input your Injective Address||
 |private_key|True|input your private key||
-|fee_recipient|True|input the Injective Address to receive 40% transaction fee||
 |is_mainnet|True|trading on mainnet or testnet||
 |base_asset|True|In INJ/USDT, INJ is the base_asset||
 |quote_asset|True|In INJ/USDT. USDT is the quote_asset||
