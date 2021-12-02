@@ -21,22 +21,51 @@ from pyinjective.wallet import PrivateKey, PublicKey, Address
 from pyinjective.async_client import AsyncClient
 from util.constant import *
 from datetime import datetime
+from configparser import ConfigParser
 
 
 class PerpTemplate(object):
-    def __init__(self, setting, logger):
+    def __init__(self, setting, logger, mainnet_configs, testnet_configs):
         self.logger = logger
-        # price ticker size
-        self.ticker_size = 0.001
-        # quantity ticker size, you can find more infomation fromn source code of injective-py
-        self.step_size = 0.1
+        self.symbol = setting["symbol"]
+        self.base_asset = setting["base_asset"]
+        self.quote_asset = setting["quote_asset"]
+        pair = self.base_asset + "/" + self.quote_asset
+
+        if setting["is_mainnet"] == 'true':
+            self.logger.info('you are using mainnet')
+            self.network = Network.mainnet()
+            denom_config = mainnet_configs
+        else:
+            self.logger.info("you are using testnet")
+            self.network = Network.testnet()
+            denom_config = testnet_configs
+        for market_id in denom_config.sections():
+            description = denom_config[market_id].get('description')
+
+            if description:
+                information = description.replace("'", "").split(" ")
+                market_type = information[1]
+                symbol = information[2]
+                if market_type == "Derivative" and symbol == pair:
+                    # Note: market_id of same traidng pair for testnet and mainnet are different.
+                    # see more details from source code in injective-py
+                    self.market_id = market_id
+                    self.description = description
+                    self.base_decimal = int(
+                        denom_config[self.market_id]['base'])
+                    self.quote_decimal = int(
+                        denom_config[self.market_id]['quote'])
+                    self.tick_size = denom_config[
+                        self.market_id]['min_display_price_tick_size']
+                    self.step_size = denom_config[
+                        self.market_id]['min_display_quantity_tick_size']
+                    self.logger.info(
+                        "find metedata of trading pair {}".format(self.description))
+                    break
 
         self.priv_key = PrivateKey.from_hex(setting["priv_key"])
         self.pub_key = self.priv_key.to_public_key()
-        if setting["is_mainnet"] is False:
-            self.network = Network.testnet()
-        else:
-            self.network = Network.mainnet(node='sentry0')
         self.client = AsyncClient(self.network, insecure=True)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.get_address())
@@ -46,9 +75,6 @@ class PerpTemplate(object):
         self.sender = self.fee_recipient = self.address.to_acc_bech32()
 
         self.composer = ProtoMsgComposer(network=self.network.string())
-        # Note: market_id of same traidng pair for testnet and mainnet are different.
-        # see more details from source code in injective-py
-        self.market_id = setting["market_id"]
         self.is_trading = False
         self.active_orders = {}  # [order_hash: order_data]
         self.tick = None
@@ -78,7 +104,7 @@ class PerpTemplate(object):
 
     async def get_liquidable_position(self):
         liquidable_positions = await self.client.get_derivative_liquidable_positions(
-            market_id=self.market)
+            market_id=self.market_id)
         self.logger.debug(liquidable_positions)
 
     """perp order related function"""
@@ -97,9 +123,25 @@ class PerpTemplate(object):
         async with grpc.aio.insecure_channel(self.network.grpc_exchange_endpoint) as channel:
             derivative_exchange_rpc = derivative_exchange_rpc_grpc.InjectiveDerivativeExchangeRPCStub(
                 channel)
-            orderbookresp = await derivative_exchange_rpc.Orderbook(derivative_exchange_rpc_pb.OrderbookRequest(market_id=self.market_id))
-            print("\n-- Orderbook Update:\n", orderbookresp)
-            return orderbookresp
+            orderbook = await derivative_exchange_rpc.Orderbook(derivative_exchange_rpc_pb.OrderbookRequest(market_id=self.market_id))
+            print("\n-- Orderbook Update:\n", orderbook)
+            tick_data = TickData()
+            for i in range(min([len(orderbook.orderbook.sells),
+                                len(orderbook.orderbook.buys), 5])):
+                tick_data.__setattr__(
+                    "ask_price_" + str(i + 1),
+                    float(orderbook.orderbook.sells[i].price) * pow(10, self.base_decimal - self.quote_decimal))
+                tick_data.__setattr__(
+                    "bid_price_" + str(i + 1),
+                    float(orderbook.orderbook.buys[i].price) * pow(10, self.base_decimal - self.quote_decimal))
+                tick_data.__setattr__(
+                    "ask_volume_" + str(i + 1),
+                    float(
+                        orderbook.orderbook.sells[i].quantity) * pow(10, -1 * self.base_decimal))
+                tick_data.__setattr__(
+                    "bid_volume_" + str(i + 1),
+                    float(orderbook.orderbook.buys[i].quantity) * pow(10, -1 * self.base_decimal))
+            await self.on_tick(tick_data)
 
     async def stream_orderbook(self, market_id):
         orderbooks = await self.client.stream_derivative_orderbook(market_id=market_id)
@@ -109,20 +151,17 @@ class PerpTemplate(object):
                                 len(orderbook.orderbook.buys), 5])):
                 tick_data.__setattr__(
                     "ask_price_" + str(i + 1),
-                    float(orderbook.orderbook.sells[i].price) *
-                    price_denom_to_real_multi[self.market_id])
+                    float(orderbook.orderbook.sells[i].price) * pow(10, self.base_decimal - self.quote_decimal))
                 tick_data.__setattr__(
                     "bid_price_" + str(i + 1),
-                    float(orderbook.orderbook.buys[i].price) *
-                    price_denom_to_real_multi[self.market_id])
+                    float(orderbook.orderbook.buys[i].price) * pow(10, self.base_decimal - self.quote_decimal))
                 tick_data.__setattr__(
                     "ask_volume_" + str(i + 1),
-                    float(orderbook.orderbook.sells[i].quantity) *
-                    base_quantity_denom_to_real_multi[self.market_id])
+                    float(
+                        orderbook.orderbook.sells[i].quantity) * pow(10, -1 * self.base_decimal))
                 tick_data.__setattr__(
                     "bid_volume_" + str(i + 1),
-                    float(orderbook.orderbook.buys[i].quantity) *
-                    base_quantity_denom_to_real_multi[self.market_id])
+                    float(orderbook.orderbook.buys[i].quantity) * pow(10, -1 * self.base_decimal))
             tick_data.timestamp = orderbook.timestamp
             await self.on_tick(tick_data)
 
@@ -163,11 +202,11 @@ class PerpTemplate(object):
             trade_data.market_id = trade.trade.market_id
             trade_data.trade_execution_type = trade.trade.trade_execution_type
             trade_data.execution_price = round_to(
-                float(trade.trade.position_delta.execution_price) * price_denom_to_real_multi[market_id], self.ticker_size)
+                float(trade.trade.position_delta.execution_price) * pow(10, self.base_decimal - self.quote_decimal), self.tick_size)
             trade_data.execution_quantity = round_to(float(
-                trade.trade.position_delta.execution_quantity) * base_quantity_denom_to_real_multi[market_id], self.step_size)
+                trade.trade.position_delta.execution_quantity) * pow(10, -1 * self.base_decimal), self.step_size)
             trade_data.execution_margin = float(
-                trade.trade.position_delta.execution_margin) * price_denom_to_real_multi[market_id]
+                trade.trade.position_delta.execution_margin) * pow(10, -1 * self.base_decimal)
             trade_data.trade_direction = trade.trade.position_delta.trade_direction
             trade_data.executed_time = trade.trade.executed_at
             await self.on_trade(trade_data)
@@ -183,13 +222,13 @@ class PerpTemplate(object):
             order_data.market_id = order.order.market_id
             order_data.subaccount_id = order.order.subaccount_id
             order_data.margin = float(
-                order.order.margin) * price_denom_to_real_multi[market_id]
+                order.order.margin) * pow(10, self.base_decimal - self.quote_decimal)
             order_data.price = round_to(
-                float(order.order.price) * price_denom_to_real_multi[market_id], self.ticker_size)
+                float(order.order.price) * pow(10, self.base_decimal - self.quote_decimal), self.tick_size)
             order_data.quantity = float(
-                order.order.quantity) * base_quantity_denom_to_real_multi[market_id]
+                order.order.quantity) * pow(10, -1 * self.base_decimal)
             order_data.unfilled_quantity = float(
-                order.order.unfilled_quantity) * base_quantity_denom_to_real_multi[market_id]
+                order.order.unfilled_quantity) * pow(10, -1 * self.base_decimal)
             order_data.state = order.order.state
             order_data.created_time = order.order.created_at
             # for reduce-only order, margin is 0
@@ -208,31 +247,31 @@ class PerpTemplate(object):
             position_data.market_id = position.position.market_id
             position_data.subaccount_id = position.position.subaccount_id
             position_data.direction = position.position.direction
-            position_data.quantity = float(position.position.quantity) * \
-                base_quantity_denom_to_real_multi[market_id]
+            position_data.quantity = float(
+                position.position.quantity) * pow(10, -1 * self.base_decimal)
             position_data.mark_price = round_to(
                 float(position.position.mark_price) *
-                price_denom_to_real_multi[market_id], self.ticker_size)
+                pow(10, self.base_decimal - self.quote_decimal), self.tick_size)
 
             if position.position.entry_price == '':
                 position_data.entry_price = 0
             else:
                 position_data.entry_price = round_to(
                     float(position.position.entry_price) *
-                    price_denom_to_real_multi[market_id], self.ticker_size)
+                    pow(10, self.base_decimal - self.quote_decimal), self.tick_size)
 
             if position.position.margin != '':
                 position_data.margin = float(
-                    position.position.margin) * price_denom_to_real_multi[market_id]
+                    position.position.margin) * self.base_decimal - self.quote_decimal
 
             if position.position.liquidation_price != '':
                 position_data.liquidation_price = round_to(
                     float(position.position.liquidation_price) *
-                    price_denom_to_real_multi[market_id], self.ticker_size)
+                    pow(10, self.base_decimal - self.quote_decimal), self.tick_size)
 
             position_data.aggregate_reduce_only_quantity = float(
                 position.position.aggregate_reduce_only_quantity) * \
-                base_quantity_denom_to_real_multi[market_id]
+                pow(10, -1 * self.base_decimal)
             position_data.timestamp = position.timestamp
             await self.on_position(position_data)
 
@@ -273,12 +312,13 @@ class PerpTemplate(object):
             order_data.market_id = order.market_id
             order_data.subaccount_id = order.subaccount_id
             order_data.margin = round_to(float(order.margin) *
-                                         quote_quantity_denom_to_real_multi[self.market_id], self.ticker_size)
+                                         pow(10, -1 * self.base_decimal), self.step_size)
             order_data.price = round_to(float(order.price) *
-                                        price_denom_to_real_multi[self.market_id], self.ticker_size)
-            order_data.quantity = float(order.quantity)
+                                        pow(10, self.base_decimal - self.quote_decimal), self.tick_size)
+            order_data.quantity = float(
+                order.quantity) * pow(10, -1 * self.base_decimal)
             order_data.unfilled_quantity = float(
-                order.unfilled_quantity)
+                order.unfilled_quantity) * pow(10, -1 * self.base_decimal)
             order_data.state = order.state
             order_data.created_time = order.created_at
             if order_data.margin != 0 and order_data.quantity != 0:
