@@ -1,38 +1,7 @@
-# python _sdk_demo
+# Mean Reversion Strategy
+## How to run mean reversion strategy
 
-
-![](../../../logos/Logo_stacked_Brand_Black_with_space.png)
-
-
-[toc]
-
-## Prerequisite
-
-python 3.7+
-
-pyinjective (please install latest code in master branch from github, https://github.com/InjectiveLabs/sdk-python)
-
-### Install injective python_sdk package
-
-```bash
-pip install injective-py
-```
-
-If you had problems while installing the injective python_sdk package, you should install the dependencies in
-https://ofek.dev/coincurve/
-
-You could find more information about injective-py in https://pypi.org/project/injective-py/
-
-If the latest package is not uploaded to pypi, you use the following commands to update `injective-py`
-
-```bash
-git clone https://github.com/InjectiveLabs/sdk-python.git
-python setup.py install
-```
-
-## How to run demo
-
-Modify environment value in `./config/configs.ini`, then
+Modify config values in `./config/configs.ini`, in section `mean_reversion`, then
 
 ```bash
 python start.py
