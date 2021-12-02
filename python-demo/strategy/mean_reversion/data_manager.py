@@ -97,7 +97,8 @@ class SmaDataManager(DataManager):
         self.container['BestAskQuantity'].append(best_ask_quantity)
 
         # calculate the moving average and moving standard deviation
-        self.container['AVG'].append(self.container['AVG'][-1] - (self.container['MidPrice'][0] / self.n_win) + (mid_price / self.n_win))
+        self.container['AVG'].append(self.container['AVG'][-1] - (self.container['MidPrice'][0] / self.n_win) +
+                                     (mid_price / self.n_win))
         self.container['MidPrice'].append(mid_price)
         std = np.std(self.container["MidPrice"])
 

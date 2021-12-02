@@ -3,7 +3,7 @@ import traceback
 
 # from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from strategy.mean_reversion.mean_reversion_strategy import SmaSpotStrategy
+from mean_reversion_strategy import SmaSpotStrategy
 from configparser import ConfigParser
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))

@@ -13,7 +13,7 @@ from pyinjective.composer import Composer as ProtoMsgComposer
 from pyinjective.transaction import Transaction
 from pyinjective.wallet import PrivateKey
 
-from .data_manager import SmaDataManager
+from data_manager import SmaDataManager
 
 
 _config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'config')
