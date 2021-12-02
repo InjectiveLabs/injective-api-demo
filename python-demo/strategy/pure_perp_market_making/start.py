@@ -44,7 +44,6 @@ if __name__ == "__main__":
     mainnet_configs = ConfigParser()
     mainnet_configs.read(os.path.join(CONFIG_DIR, "denoms_mainnet.ini"))
     testnet_configs = ConfigParser()
-
     testnet_configs.read(os.path.join(CONFIG_DIR, "denoms_testnet.ini"))
 
     try:
