@@ -17,29 +17,21 @@ import traceback
 
 
 class Demo(PerpTemplate):
-    def __init__(self, setting, logger):
-        super().__init__(setting, logger)
+    def __init__(self, setting, logger, mainnet_configs, testnet_configs):
+        super().__init__(setting, logger, mainnet_configs, testnet_configs)
         self.setting = setting
         self.is_trading = False
         self.init_strategy()
 
     def init_strategy(self):
-
-        self.maker_fee = 0.001
-        self.taker_fee = 0.03
-        self.minimal_profit = 0.0001
-
-        self.tick_size = 0.1
-        self.step_size = 0.001
         self.net_position = 0
         self.curr_duration_volume = 0
         self.last_duration_volume = 0
+        self.tick = None
 
         self.interval = int(self.setting["interval"])
         self.active_orders = {}  # [order_hash, : order_data]
-        self.symbol = self.setting["symbol"]
-        self.base_asset = self.setting["base_asset"]
-        self.quote_asset = self.setting["quote_asset"]
+
         self.quote_denom = denom_dict[self.quote_asset]
 
         self.leverage = float(self.setting["leverage"])
@@ -60,7 +52,7 @@ class Demo(PerpTemplate):
         loop.run_until_complete(self.get_init_position())
         loop.run_until_complete(
             self.get_open_orders(self.acc_id, self.market_id))
-        self.tick = None
+        loop.run_until_complete(self.get_orderbook())
         self.msg_list = []
 
         self.subscribe_stream()

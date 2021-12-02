@@ -39,13 +39,16 @@ if __name__ == "__main__":
     logging.getLogger('apscheduler.executors.default').setLevel(
         logging.WARNING)
 
-    config_path = os.path.join(
-        _current_dir, "config", config_name)
     configs = ConfigParser()
     configs.read(os.path.join(CONFIG_DIR, config_name))
+    mainnet_configs = ConfigParser()
+    mainnet_configs.read(os.path.join(CONFIG_DIR, "denoms_mainnet.ini"))
+    testnet_configs = ConfigParser()
+    testnet_configs.read(os.path.join(CONFIG_DIR, "denoms_testnet.ini"))
+
     try:
         perp_demo = Demo(
-            configs['pure perp market making'], logging)
+            configs['pure perp market making'], logging, mainnet_configs, testnet_configs)
         perp_demo.start()
     except Exception as e:
         logging.CRITICAL(traceback.format_exc())

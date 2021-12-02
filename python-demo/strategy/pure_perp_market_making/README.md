@@ -1,33 +1,29 @@
 # Pure Perp Market Making Demo
-## Prerequisite
 
-python 3.7+
+## How to run pure perpetual market making demo
 
-pyinjective (please install latest code in master branch from github, https://github.com/InjectiveLabs/sdk-python)
-
-### Install injective python_sdk package
-
-```bash
-pip install injective-py
-```
-
-If you had problems while installing the injective python_sdk package, you should install the dependencies in
-https://ofek.dev/coincurve/
-
-You could find more information about injective-py in https://pypi.org/project/injective-py/
-
-If the latest package is not uploaded to pypi, you use the following commands to update `injective-py`
-
-```bash
-git clone https://github.com/InjectiveLabs/sdk-python.git
-python setup.py install
-```
-## How to run demo
 Modify environment value in python_demo/config/configs.ini, then
 
+```bash
 python start.py
-## What does demo do
-Demo with default json setting is a simple Perpetual BTCUSDT pure market-making strategy, which places one bid order and one ask order around midprice`(midprice = (bid_price_1+ask_price_1) / 2)`, `placing_spread/mid_price` is fixed according to the value in configuration. And it will cancel and quote bid/ask order every interval(default is 20) seconds. You can add more logic to manage inventory risk.
+```
+
+## What does pure perpetual market making strategy do
+
+Demo with default json setting is a simple Perpetual BTCUSDT pure market-making strategy, which places one bid order and one ask order around midprice `(midprice = (bid_price_1+ask_price_1) / 2)`, `placing_spread/mid_price` is fixed according to the value in configuration. And it will cancel and quote bid/ask order every interval(default is 20) seconds. **You can add more logic in strategy to manage inventory risk.**
+
+| Parameter     | Required | Description                                                |
+| ------------- | -------- | ---------------------------------------------------------- |
+| strategy_name | True     |                                                            |
+| priv_key      | True     | private key of your account                                |
+| is_mainnet    | True     | 'true' stands for mainnet;<br />'false' stands for testnet |
+| leverage      | True     | leverage for each order                                    |
+| interval      | True     | frequency of placking orders( in second)                   |
+| order_size    | True     |                                                            |
+| spread_ratio  | True     | spread for bid and ask orders                              |
+| symbol        | True     | e.g. BTCUSDT                                               |
+| base_asset    | True     | e.g. BTC                                                   |
+| quote_asset   | True     | e.g. USDT                                                  |
 
 ## Decimal
 
@@ -47,4 +43,3 @@ And there are a few suggestions on how to report demo or API  issues.
 2. open an issue from injective-exchange `injective_api_demo` directly and label these issues properly with (bugs, enhancement, features, etc), and mentioned `python_demo` in title.
 3. for each issue, please explain what is the issue, how to reproduce it, and present enough proofs (logs, screen shots, raw responses, etc)
 4. let's always go extra one mile when reporting any issues since developer will likely spend more time on fixing those.
-
