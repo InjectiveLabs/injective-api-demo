@@ -162,13 +162,13 @@ class InjectiveSpotStrategy(Strategy):
         )
 
     async def place_and_replace_orders(self):
-        print("start place orders is running")
+        print("cross exchange strategy is running")
         """
         You can add your own logic here to place and cancel orders.
         """
         while True:
             if not self._orders.empty():
-                if self._orders.qsize() == 2:
+                if self._orders.qsize() != 0:
                     (res_msg, sim_res_msg) = await self._batch_cancel_spot_orders()
                 else:
                     pass
@@ -239,7 +239,7 @@ class InjectiveSpotStrategy(Strategy):
                     pass
 
     async def place_orders(self):
-        print("start place orders is running")
+        print("place orders is running")
         while True:
             if self._state == State.BOTH:
                 if (self._prices != self._prev_prices) and (0 not in self._prices):
@@ -294,12 +294,12 @@ class InjectiveSpotStrategy(Strategy):
                     pass
 
     async def cancel_orders(self):
-        print("start cancel orders is running")
+        print("cancel orders is running")
         while True:
             if self._orders.empty():
                 await sleep(0.3)
             else:
-                if self._orders.qsize() == 2:
+                if self._orders.qsize() >= 2:
                     (res_msg, sim_res_msg) = await self._batch_cancel_spot_orders()
                 elif self._orders.qsize == 1:
                     (res_msg, sim_res_msg) = await self._cancel_spot_limit_order()
@@ -371,7 +371,82 @@ class InjectiveSpotStrategy(Strategy):
         res = await self._client.send_tx_block_mode(tx_raw_bytes)
         res_msg = Composer.MsgResponses(res.data)
 
-        self._orders.put_nowait(res_msg[0])
+        self._orders.put_nowait((res_msg[0], (price, quantity, is_buy)))
+
+        if sim_res_msg is not None:
+            return (res_msg, sim_res_msg)
+        else:
+            return (res_msg, None)
+
+    async def _replace_spot_limit_order(
+        self, price: float, quantity: float, is_buy: bool, simulation: bool = True
+    ):
+
+        cancel_orders = []
+        cancel_orders_detail = []
+        while not self._orders.empty():
+            order_tuple = self._orders.get_nowait()
+            cancel_orders.append(
+                self._composer.OrderData(
+                    market_id=self._market_id,
+                    subaccount_id=self._subaccount_id,
+                    order_hash=order_tuple[0],
+                )
+            )
+            cancel_orders_detail.append(order_tuple[1])
+
+        # prepare tx msg
+        cancel_msg = self._composer.MsgBatchCancelSpotOrders(
+            sender=self._address.to_acc_bech32(), data=cancel_orders
+        )
+
+
+        # prepare tx msg
+        create_msg = self._composer.MsgCreateSpotLimitOrder(
+            sender=self._address.to_acc_bech32(),
+            market_id=self._market_id,
+            subaccount_id=self._subaccount_id,
+            fee_recipient=self._fee_recipient,
+            price=price,
+            quantity=quantity,
+            is_buy=is_buy,
+        )
+
+        # build sim tx
+        tx = (
+            Transaction()
+            .with_messages(cancel_msg, create_msg)
+            .with_sequence(self._address.get_sequence())
+            .with_account_num(self._address.get_number())
+            .with_chain_id(self._network.chain_id)
+        )
+        if simulation:
+            (gas_used, sim_res_msg) = await self._simulate_transcation(tx)
+            if gas_used is None:
+                gas_limit = 165000
+            else:
+                gas_limit = gas_used + 15000
+        else:
+            gas_limit = 165000
+            sim_res_msg = None
+
+        # build tx
+        fee = [
+            self._composer.Coin(
+                amount=self._gas_price * gas_limit,
+                denom=self._network.fee_denom,
+            )
+        ]
+
+        tx = tx.with_gas(gas_limit).with_fee(fee).with_memo("").with_timeout_height(0)
+        sign_doc = tx.get_sign_doc(self._pub_key)
+        sig = self._priv_key.sign(sign_doc.SerializeToString())
+        tx_raw_bytes = tx.get_tx_data(sig, self._pub_key)
+
+        # broadcast tx: send_tx_async_mode, send_tx_sync_mode, send_tx_block_mode
+        res = await self._client.send_tx_block_mode(tx_raw_bytes)
+        res_msg = Composer.MsgResponses(res.data)
+
         self._orders.put_nowait((res_msg[0], (price, quantity, is_buy)))
 
         if sim_res_msg is not None:
@@ -549,6 +624,161 @@ class InjectiveSpotStrategy(Strategy):
         if sim_res_msg is not None:
             return (res_msg, sim_res_msg)
         return (res_msg, None)
+
+    async def _batch_replace_spot_limit_orders(self, orders_list: List[Tuple[float, float, bool]], simulation: bool = True):
+        cancel_orders = []
+        cancel_orders_detail = []
+        while not self._orders.empty():
+            order_tuple = self._orders.get_nowait()
+            cancel_orders.append(
+                self._composer.OrderData(
+                    market_id=self._market_id,
+                    subaccount_id=self._subaccount_id,
+                    order_hash=order_tuple[0],
+                )
+            )
+            cancel_orders_detail.append(order_tuple[1])
+
+        # prepare tx msg
+        cancel_msg = self._composer.MsgBatchCancelSpotOrders(
+            sender=self._address.to_acc_bech32(), data=cancel_orders
+        )
+
+
+
+        create_orders = [
+            self._composer.SpotOrder(
+                market_id=self._market_id,
+                subaccount_id=self._subaccount_id,
+                fee_recipient=self._fee_recipient,
+                price=price,
+                quantity=quantity,
+                is_buy=is_buy,
+            )
+            for (price, quantity, is_buy) in orders_list
+        ]
+
+        # prepare tx msg
+        create_msg = self._composer.MsgBatchCreateSpotLimitOrders(
+            sender=self._address.to_acc_bech32(), orders=create_orders
+        )
+
+        # build sim tx
+        tx = (
+            Transaction()
+            .with_messages(cancel_msg, create_msg)
+            .with_sequence(self._address.get_sequence())
+            .with_account_num(self._address.get_number())
+            .with_chain_id(self._network.chain_id)
+        )
+
+        (gas_used, sim_res_msg) = await self._simulate_transcation(tx)
+        # order_hash in sim_res_msg
+        if gas_used is None:
+            gas_limit = max(150000 * len(create_orders), 165000)
+        else:
+            gas_limit = gas_used + 15000
+        fee = [
+            self._composer.Coin(
+                amount=self._gas_price * gas_limit,
+                denom=self._network.fee_denom,
+            )
+        ]
+        tx = tx.with_gas(gas_limit).with_fee(fee).with_memo("").with_timeout_height(0)
+        sign_doc = tx.get_sign_doc(self._pub_key)
+        sig = self._priv_key.sign(sign_doc.SerializeToString())
+        tx_raw_bytes = tx.get_tx_data(sig, self._pub_key)
+
+        # broadcast tx: send_tx_async_mode, send_tx_sync_mode, send_tx_block_mode
+        res = await self._client.send_tx_block_mode(tx_raw_bytes)
+
+        for order_detail in cancel_orders_detail:
+            if order_detail[2]:
+                self._quote_balance += order_detail[0] * order_detail[1]
+            else:
+                self._base_balance += order_detail[1]
+
+        res_msg = Composer.MsgResponses(res.data)
+        for idx, order_hash in enumerate(res_msg[1].order_hashes):
+            self._orders.put_nowait((order_hash, orders_list[idx]))
+
+
+        if sim_res_msg is not None:
+            return (res_msg, sim_res_msg)
+        return (res_msg, None)
+
+
+    async def place_and_replace_orders_same_tx(self):
+        print("cross exchange strategy same tx is running")
+        """
+        You can add your own logic here to place and cancel orders.
+        """
+        while True:
+            if self._state == State.BOTH:
+                # sufficient balance in base asset and quote asset, place two orders
+                if (self._prices != self._prev_prices) and (0 not in self._prices):
+                    if (
+                        self._base_balance <= self._min_base_balance
+                        and self._quote_balance <= self._min_quote_balance
+                    ):
+                        self._state = State.NONE
+                    elif self._base_balance <= self._min_base_balance:
+                        self._state = State.BUY
+                    elif self._quote_balance <= self._min_quote_balance:
+                        self._state = State.SELL
+                    else:
+                        orders_list = [
+                            (
+                                round(self._prices[0] * 0.5, 2),
+                                self._min_order_size,
+                                True,
+                            ),
+                            (
+                                round(self._prices[1] * 2.0, 4),
+                                self._min_order_size,
+                                False,
+                            ),
+                        ]
+                        self._quote_balance -= self._min_order_size
+                        self._base_balance -= self._min_order_size
+                        (
+                            res_msg,
+                            sim_res_msg,
+                        ) = await self._batch_replace_spot_limit_orders(orders_list)
+                else:
+                    await sleep(1)
+            elif self._state == State.BUY:
+                # no enough balance in base asset, place sell order on quote asset
+                (res_msg, sim_res_msg) = await self._replace_spot_limit_order(
+                    round(self._prices[0] * 0.5, 2), self._min_order_size, True
+                )
+                self._quote_balance -= self._min_order_size
+            elif self._state == State.SELL:
+                # no enough balance in quote asset, place sell order on base asset
+                (res_msg, sim_res_msg) = await self._replace_spot_limit_order(
+                    round(self._prices[0] * 2, 2), self._min_order_size, False
+                )
+                self._base_balance -= self._min_order_size
+            elif self._state == State.NONE:
+                # no enough balance to place orders, so we keep checking for changes in balance
+                if (
+                    self._base_balance > self._min_base_balance
+                    and self._quote_balance >= self._min_quote_balance
+                ):
+                    self._state = State.BOTH
+                elif (
+                    self._base_balance <= self._min_base_balance
+                    and self._quote_balance > self._min_quote_balance
+                ):
+                    self._state = State.BUY
+                elif (
+                    self._quote_balance <= self._min_quote_balance
+                    and self._base_balance > self._min_base_balance
+                ):
+                    self._state = State.SELL
+                else:
+                    pass
+
 
 
 class ExchangeClient(ABC):
