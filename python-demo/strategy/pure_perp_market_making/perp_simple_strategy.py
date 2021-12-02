@@ -27,6 +27,7 @@ class Demo(PerpTemplate):
         self.net_position = 0
         self.curr_duration_volume = 0
         self.last_duration_volume = 0
+        self.tick = None
 
         self.interval = int(self.setting["interval"])
         self.active_orders = {}  # [order_hash, : order_data]
@@ -52,7 +53,6 @@ class Demo(PerpTemplate):
         loop.run_until_complete(
             self.get_open_orders(self.acc_id, self.market_id))
         loop.run_until_complete(self.get_orderbook())
-        self.tick = None
         self.msg_list = []
 
         self.subscribe_stream()

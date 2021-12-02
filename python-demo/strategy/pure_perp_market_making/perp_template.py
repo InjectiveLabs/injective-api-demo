@@ -62,6 +62,7 @@ class PerpTemplate(object):
                         self.market_id]['min_display_quantity_tick_size']
                     self.logger.info(
                         "find metedata of trading pair {}".format(self.description))
+                    self.logger.info("market id:{}".format(self.market_id))
                     break
 
         self.priv_key = PrivateKey.from_hex(setting["priv_key"])
