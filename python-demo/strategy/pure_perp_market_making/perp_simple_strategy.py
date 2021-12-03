@@ -1,4 +1,3 @@
-
 from perp_template import PerpTemplate
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -81,9 +80,9 @@ class Demo(PerpTemplate):
     async def get_init_position(self):
         position = await self.get_position()
         if len(position.positions) > 0:
-            position_data = position.positions[0].positions
-            self.net_position = position_data.quantity if position.positions[
-                0].position.direction == "long" else -position_data.quantity
+            position_data = position.positions[0]
+            self.net_position = float(
+                position_data.quantity) if position_data.direction == "long" else -float(position_data.quantity)
             self.logger.info(
                 f"net position in {self.symbol}:{self.net_position}")
         else:
