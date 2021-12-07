@@ -94,7 +94,10 @@ class Demo(PerpTemplate):
 
     async def on_timer(self):
         if not self.tick:
-            print("fail to get tick data by stream orderbook")
+            self.logger.critical("self.tick is None")
+            return
+        if self.tick.ask_price_1 == 0 or self.tick.bid_price_1 == 0:
+            self.logger.critical("fail to get latest orderbook price")
             return
 
         await self.get_address()
