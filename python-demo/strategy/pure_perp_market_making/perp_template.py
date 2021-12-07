@@ -121,28 +121,25 @@ class PerpTemplate(object):
         return orders
 
     async def get_orderbook(self):
-        async with grpc.aio.insecure_channel(self.network.grpc_exchange_endpoint) as channel:
-            derivative_exchange_rpc = derivative_exchange_rpc_grpc.InjectiveDerivativeExchangeRPCStub(
-                channel)
-            orderbook = await derivative_exchange_rpc.Orderbook(derivative_exchange_rpc_pb.OrderbookRequest(market_id=self.market_id))
-            print("\n-- Orderbook Update:\n", orderbook)
-            tick_data = TickData()
-            for i in range(min([len(orderbook.orderbook.sells),
-                                len(orderbook.orderbook.buys), 5])):
-                tick_data.__setattr__(
-                    "ask_price_" + str(i + 1),
-                    float(orderbook.orderbook.sells[i].price) * pow(10, self.base_decimal - self.quote_decimal))
-                tick_data.__setattr__(
-                    "bid_price_" + str(i + 1),
-                    float(orderbook.orderbook.buys[i].price) * pow(10, self.base_decimal - self.quote_decimal))
-                tick_data.__setattr__(
-                    "ask_volume_" + str(i + 1),
-                    float(
-                        orderbook.orderbook.sells[i].quantity) * pow(10, -1 * self.base_decimal))
-                tick_data.__setattr__(
-                    "bid_volume_" + str(i + 1),
-                    float(orderbook.orderbook.buys[i].quantity) * pow(10, -1 * self.base_decimal))
-            await self.on_tick(tick_data)
+        orderbook = await self.client.get_derivative_orderbook(market_id=self.market_id)
+        print("\n-- Orderbook Update:\n", orderbook)
+        tick_data = TickData()
+        for i in range(min([len(orderbook.orderbook.sells),
+                            len(orderbook.orderbook.buys), 5])):
+            tick_data.__setattr__(
+                "ask_price_" + str(i + 1),
+                float(orderbook.orderbook.sells[i].price) * pow(10, self.base_decimal - self.quote_decimal))
+            tick_data.__setattr__(
+                "bid_price_" + str(i + 1),
+                float(orderbook.orderbook.buys[i].price) * pow(10, self.base_decimal - self.quote_decimal))
+            tick_data.__setattr__(
+                "ask_volume_" + str(i + 1),
+                float(
+                    orderbook.orderbook.sells[i].quantity) * pow(10, -1 * self.base_decimal))
+            tick_data.__setattr__(
+                "bid_volume_" + str(i + 1),
+                float(orderbook.orderbook.buys[i].quantity) * pow(10, -1 * self.base_decimal))
+        await self.on_tick(tick_data)
 
     async def stream_orderbook(self, market_id):
         orderbooks = await self.client.stream_derivative_orderbook(market_id=market_id)
