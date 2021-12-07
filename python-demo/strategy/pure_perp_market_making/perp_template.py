@@ -1,10 +1,4 @@
 import asyncio
-import grpc
-import pyinjective.proto.exchange.injective_derivative_exchange_rpc_pb2 as derivative_exchange_rpc_pb
-import pyinjective.proto.exchange.injective_derivative_exchange_rpc_pb2_grpc as derivative_exchange_rpc_grpc
-
-import pyinjective.proto.exchange.injective_accounts_rpc_pb2 as accounts_rpc_pb
-import pyinjective.proto.exchange.injective_accounts_rpc_pb2_grpc as accounts_rpc_grpc
 
 from pyinjective.constant import Network
 from pyinjective.composer import Composer as ProtoMsgComposer
