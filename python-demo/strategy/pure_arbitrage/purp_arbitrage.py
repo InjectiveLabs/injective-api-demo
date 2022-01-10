@@ -195,7 +195,7 @@ class Demo(PerpTemplate):
                 sender=self.sender,
                 subaccount_id=self.acc_id,
                 fee_recipient=self.fee_recipient,
-                price=ceil_to(price * (1- 0.00001), self.tick_size),
+                price=floor_to(price * (1- 0.00001), self.tick_size),
                 quantity=floor_to(order_size, self.step_size),
                 leverage=1,
                 is_buy=False
