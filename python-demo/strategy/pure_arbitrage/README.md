@@ -20,7 +20,7 @@ python start.py
 | interval           | True     | frequency of arbitrage (in second)                                                                                             |
 | arb_threshold      | True     | threshold for price gap between two exchanges<br />if current price gap is larger than threshold, do arbitrategy on both sides |
 | order_size         | True     | max order size                                                                                                                 |
-| re_binance_hour    | True     | interval to rebalance positions on both exchange                                                                               |
+| re_balance_hour    | True     | interval to rebalance positions on both exchange                                                                               |
 | symbol             | True     | e.g. BTCUSDT                                                                                                                   |
 | base_asset         | True     | e.g. BTC                                                                                                                       |
 | quote_asset        | True     | e.g. USDT                                                                                                                      |
