@@ -29,6 +29,7 @@ class Demo(PerpTemplate):
         self.tick = None
 
         self.interval = int(self.setting["interval"])
+        self.re_balance_interval_hour = self.setting["re_balance_interval_hour"]
         self.active_orders = {}  # [order_hash, : order_data]
 
         self.quote_denom = denom_dict[self.quote_asset]
@@ -60,8 +61,10 @@ class Demo(PerpTemplate):
     def add_schedule(self):
         self.sched = AsyncIOScheduler()
         self.sched.add_job(self.on_timer, 'interval',
-                           seconds=self.interval)
+                           seconds=self.interval, id="timer")
 
+        self.sched.add_job(self.close_position, 'interval',
+                           seconds=self.re_balance_interval_hour * 3600, id="re_balance_position")
     def subscribe_stream(self):
         self.tasks = [
             asyncio.Task(self.stream_order(self.market_id, self.acc_id)),
@@ -222,6 +225,83 @@ class Demo(PerpTemplate):
                     order_hash=order_hash
                 ))
 
+    async def close_position(self):
+        self.sched.pause_job("timer")
+        
+        self.msg_list = []
+        
+        self.cancel_all()
+        
+        if self.net_position > 0:
+            self.msg_list.append(self.composer.MsgCreateDerivativeLimitOrder(
+                market_id=self.market_id,
+                sender=self.sender,
+                subaccount_id=self.acc_id,
+                fee_recipient=self.fee_recipient,
+                price=floor_to(self.tick.bid_price_1 * (1-0.0001), self.tick_size),
+                quantity=floor_to(self.net_position, self.step_size),
+                is_reduce_only=True,
+                is_buy=False
+            ))
+        elif self.net_position < 0:
+            self.msg_list.append(
+                self.composer.MsgCreateDerivativeLimitOrder(
+                    market_id=self.market_id,
+                    sender=self.sender,
+                    subaccount_id=self.acc_id,
+                    fee_recipient=self.fee_recipient,
+                    price=floor_to(self.tick.ask_price_1 * (1+ 0.0001), self.tick_size),
+                    quantity=floor_to(-self.net_position, self.step_size),
+                    is_reduce_only=True,
+                    is_buy=True
+            ))
+            
+        if len(self.msg_list):
+            tx = (
+                Transaction()
+                .with_messages(* self.msg_list)
+                .with_sequence(self.address.get_sequence())
+                .with_account_num(self.address.get_number())
+                .with_chain_id(self.network.chain_id)
+            )
+            sim_sign_doc = tx.get_sign_doc(self.pub_key)
+            sim_sig = self.priv_key.sign(sim_sign_doc.SerializeToString())
+            sim_tx_raw_bytes = tx.get_tx_data(sim_sig, self.pub_key)
+
+            # simulate tx
+            (sim_res, success) = await self.client.simulate_tx(sim_tx_raw_bytes)
+            if not success:
+                self.logger.warning(
+                    "simulation failed, simulation response:{}".format(sim_res))
+                return
+            sim_res_msg = ProtoMsgComposer.MsgResponses(
+                sim_res.result.data, simulation=True)
+            self.logger.info(
+                "simluation passed, simulation msg response {}".format(sim_res_msg))
+
+            # build tx
+            gas_limit = sim_res.gas_info.gas_used + \
+                15000  # add 15k for gas, fee computation
+            fee = [self.composer.Coin(
+                amount=self.gas_price * gas_limit,
+                denom=self.network.fee_denom,
+            )]
+            block = await self.client.get_latest_block()
+            current_height = block.block.header.height
+            tx = tx.with_gas(gas_limit).with_fee(fee).with_memo(
+                "").with_timeout_height(current_height+50)
+            sign_doc = tx.get_sign_doc(self.pub_key)
+            sig = self.priv_key.sign(sign_doc.SerializeToString())
+            tx_raw_bytes = tx.get_tx_data(sig, self.pub_key)
+
+            # broadcast tx: send_tx_async_mode, send_tx_sync_mode, send_tx_block_mode
+            res = await self.client.send_tx_block_mode(tx_raw_bytes)
+            res_msg = ProtoMsgComposer.MsgResponses(res.data)
+            self.logger.info(
+                "tx response: {}\n tx msg response:{}".format(res, res_msg))
+        
+        self.sched.resume_job("timer")
+                
     def inventory_management(self):
         pass
 
