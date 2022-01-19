@@ -219,7 +219,7 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         if gas_used is None:
             gas_limit = 165000
         else:
-            gas_limit = gas_used + 15000 # add 15k for gas_fee limit estimation
+            gas_limit = gas_used + 20000 # add 20k for gas_fee limit estimation
 
         # build transaction
         fee = [
@@ -277,7 +277,7 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         if gas_used is None:
             gas_limit = 165000
         else:
-            gas_limit = gas_used + 15000  # add 15k for gas_fee limit estimation
+            gas_limit = gas_used + 20000  # add 20k for gas_fee limit estimation
 
         # build transaction
         fee = [
@@ -331,7 +331,7 @@ class SmaSpotStrategy(InjectiveSpotStrategy):
         if gas_used is None:
             gas_limit = 165000
         else:
-            gas_limit = gas_used + 15000  # add 15k for gas_fee limit estimation
+            gas_limit = gas_used + 20000  # add 20k for gas_fee limit estimation
 
         # build transaction
         fee = [

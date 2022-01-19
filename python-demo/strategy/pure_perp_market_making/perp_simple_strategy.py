@@ -145,7 +145,7 @@ class Demo(PerpTemplate):
 
             # build tx
             gas_limit = sim_res.gas_info.gas_used + \
-                15000  # add 15k for gas, fee computation
+                20000  # add 15k for gas, fee computation
             fee = [self.composer.Coin(
                 amount=self.gas_price * gas_limit,
                 denom=self.network.fee_denom,
@@ -281,7 +281,7 @@ class Demo(PerpTemplate):
 
             # build tx
             gas_limit = sim_res.gas_info.gas_used + \
-                15000  # add 15k for gas, fee computation
+                20000  # add 15k for gas, fee computation
             fee = [self.composer.Coin(
                 amount=self.gas_price * gas_limit,
                 denom=self.network.fee_denom,

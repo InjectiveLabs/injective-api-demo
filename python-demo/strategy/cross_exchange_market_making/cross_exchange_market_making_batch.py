@@ -349,7 +349,7 @@ class InjectiveSpotStrategy(Strategy):
             if gas_used is None:
                 gas_limit = 165000
             else:
-                gas_limit = gas_used + 15000
+                gas_limit = gas_used + 20000
         else:
             gas_limit = 165000
             sim_res_msg = None
@@ -425,7 +425,7 @@ class InjectiveSpotStrategy(Strategy):
             if gas_used is None:
                 gas_limit = 165000
             else:
-                gas_limit = gas_used + 15000
+                gas_limit = gas_used + 20000
         else:
             gas_limit = 165000
             sim_res_msg = None
@@ -478,7 +478,7 @@ class InjectiveSpotStrategy(Strategy):
             if gas_used is None:
                 gas_limit = 165000
             else:
-                gas_limit = gas_used + 15000
+                gas_limit = gas_used + 20000
         else:
             gas_limit = 165000
             sim_res_msg = None
@@ -540,9 +540,9 @@ class InjectiveSpotStrategy(Strategy):
             if gas_used is None:
                 gas_limit = max(150000 * len(orders), 165000)
             else:
-                gas_limit = gas_used + 15000
+                gas_limit = gas_used + 20000
         else:
-            gas_limit = max(150000 * len(orders), 165000)
+            gas_limit = max(20000 * len(orders), 165000)
             sim_res_msg = None
         fee = [
             self._composer.Coin(
@@ -597,9 +597,9 @@ class InjectiveSpotStrategy(Strategy):
         (gas_used, sim_res_msg) = await self._simulate_transcation(tx)
         # order_hash in sim_res_msg
         if gas_used is None:
-            gas_limit = max(150000 * len(orders), 165000)
+            gas_limit = max(20000 * len(orders), 165000)
         else:
-            gas_limit = gas_used + 15000
+            gas_limit = gas_used + 20000
         fee = [
             self._composer.Coin(
                 amount=self._gas_price * gas_limit,
@@ -675,9 +675,9 @@ class InjectiveSpotStrategy(Strategy):
         (gas_used, sim_res_msg) = await self._simulate_transcation(tx)
         # order_hash in sim_res_msg
         if gas_used is None:
-            gas_limit = max(150000 * len(create_orders), 165000)
+            gas_limit = max(20000 * len(create_orders), 165000)
         else:
-            gas_limit = gas_used + 15000
+            gas_limit = gas_used + 20000
         fee = [
             self._composer.Coin(
                 amount=self._gas_price * gas_limit,
