@@ -1,4 +1,4 @@
-import importlib
+import importlib.resources as pkg_resources
 import json
 import logging
 import os
@@ -7,11 +7,6 @@ import traceback
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from configparser import ConfigParser
 import pyinjective
-
-try:
-    import importlib.resources as pkg_resources
-except ImportError as e:
-    print(e)
 
 denoms_testnet = pkg_resources.read_text(pyinjective, 'denoms_testnet.ini')
 
