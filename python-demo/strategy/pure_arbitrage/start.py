@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     try:
         perp_demo = Demo(
-            configs['pure perp market making'], logging, mainnet_configs, testnet_configs)
+            configs['pure arbitrage'], logging, mainnet_configs, testnet_configs)
         perp_demo.start()
     except Exception as e:
         logging.CRITICAL(traceback.format_exc())
