@@ -64,7 +64,7 @@ class Demo(PerpTemplate):
                            seconds=self.interval, id="timer")
 
         self.sched.add_job(self.close_position, 'interval',
-                           seconds=self.re_balance_interval_hour * 3600, id="re_balance_position")
+                           seconds=int(self.re_balance_interval_hour) * 3600, id="re_balance_position")
     def subscribe_stream(self):
         self.tasks = [
             asyncio.Task(self.stream_order(self.market_id, self.acc_id)),
