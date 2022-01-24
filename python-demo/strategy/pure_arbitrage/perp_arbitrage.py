@@ -28,7 +28,7 @@ class Demo(PerpTemplate):
         self.last_duration_volume = 0
         self.tick = None
 
-        self.arb_threshold = int(self.setting["arb_threshold"])
+        self.arb_threshold = float(self.setting["arb_threshold"])
         self.interval = int(self.setting["interval"])
         self.binance_api_key = self.setting["binance_api_key"]
         self.binance_api_secret = self.setting["binance_api_secret"]
@@ -60,7 +60,7 @@ class Demo(PerpTemplate):
         self.sched = AsyncIOScheduler()
         self.sched.add_job(self.on_timer, 'interval',
                            seconds=self.interval)
-        self.sched.add_job(self.re_balance, 'interval', seconds=3600 * self.setting['re_balance_hour'])
+        self.sched.add_job(self.re_balance, 'interval', seconds=3600 * int(self.setting['re_balance_hour']))
 
     def subscribe_stream(self):
         self.tasks = [
