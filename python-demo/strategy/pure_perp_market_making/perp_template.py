@@ -3,9 +3,6 @@ import asyncio
 from pyinjective.constant import Network
 from pyinjective.composer import Composer as ProtoMsgComposer
 
-
-from six import reraise
-
 from core.object import TickData, OrderData, TradeData, PositionData
 from util.decimal_utils import floor_to, round_to
 from typing import Callable
@@ -15,7 +12,6 @@ from pyinjective.wallet import PrivateKey, PublicKey, Address
 from pyinjective.async_client import AsyncClient
 from util.constant import *
 from datetime import datetime
-from configparser import ConfigParser
 
 
 class PerpTemplate(object):
