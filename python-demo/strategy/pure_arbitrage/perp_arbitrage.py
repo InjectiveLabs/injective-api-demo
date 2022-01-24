@@ -4,13 +4,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 from core.object import OrderData, PositionData, TradeData, TickData
 from math import fabs
-import time
 from util.decimal_utils import floor_to, ceil_to
-from util.constant import ORDERTYPE_DICT
 from pyinjective.composer import Composer as ProtoMsgComposer
 from pyinjective.transaction import Transaction
 from pyinjective.client import Client
-from util.constant import *
 from binance.enums import *
 import traceback
 from binance import AsyncClient, BinanceSocketManager
@@ -36,8 +33,6 @@ class Demo(PerpTemplate):
         self.binance_api_key = self.setting["binance_api_key"]
         self.binance_api_secret = self.setting["binance_api_secret"]
         self.active_orders = {}  # [order_hash, : order_data]
-
-        self.quote_denom = denom_dict[self.quote_asset]
 
         self.order_size = float(self.setting["order_size"])
 

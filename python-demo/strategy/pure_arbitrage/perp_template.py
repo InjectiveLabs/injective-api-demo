@@ -1,10 +1,6 @@
 import asyncio
-import json
-from configparser import ConfigParser
 from datetime import datetime
-from typing import Callable
 
-import aiohttp
 from core.object import OrderData, PositionData, TickData, TradeData
 from pyinjective.async_client import AsyncClient
 from pyinjective.composer import Composer as ProtoMsgComposer
