@@ -1,12 +1,21 @@
-
+import importlib
 import json
 import logging
 import os
-import pdb
 import sys
 import traceback
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from configparser import ConfigParser
+import pyinjective
+
+try:
+    import importlib.resources as pkg_resources
+except ImportError as e:
+    print(e)
+
+denoms_testnet = pkg_resources.read_text(pyinjective, 'denoms_testnet.ini')
+
+denoms_mainnet = pkg_resources.read_text(pyinjective, 'denoms_mainnet.ini')
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 MAIN_DIR = os.path.dirname(os.path.dirname(_current_dir))
@@ -42,9 +51,9 @@ if __name__ == "__main__":
     configs = ConfigParser()
     configs.read(os.path.join(CONFIG_DIR, config_name))
     mainnet_configs = ConfigParser()
-    mainnet_configs.read(os.path.join(CONFIG_DIR, "denoms_mainnet.ini"))
+    mainnet_configs.read_string(denoms_mainnet)
     testnet_configs = ConfigParser()
-    testnet_configs.read(os.path.join(CONFIG_DIR, "denoms_testnet.ini"))
+    testnet_configs.read_string(denoms_testnet)
 
     try:
         perp_demo = Demo(
