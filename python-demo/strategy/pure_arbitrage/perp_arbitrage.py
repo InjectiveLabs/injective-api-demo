@@ -31,7 +31,7 @@ class Demo(PerpTemplate):
         self.last_duration_volume = 0
         self.tick = None
 
-        self.arb_threshold = self.setting["arb_threshold"]
+        self.arb_threshold = int(self.setting["arb_threshold"])
         self.interval = int(self.setting["interval"])
         self.binance_api_key = self.setting["binance_api_key"]
         self.binance_api_secret = self.setting["binance_api_secret"]
