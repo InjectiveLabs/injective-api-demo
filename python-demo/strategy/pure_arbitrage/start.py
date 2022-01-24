@@ -16,7 +16,7 @@ sys.path.insert(0, MAIN_DIR)
 
 if __name__ == "__main__":
     from util.misc import restart_program
-    from pure_arbitrage import Demo
+    from perp_arbitrage import Demo
 
     log_dir = "./log"
     log_name = "./pure_arb_demo.log"
