@@ -7,11 +7,9 @@ from math import fabs
 from math import log
 import time
 from util.decimal_utils import floor_to
-from util.constant import ORDERTYPE_DICT
 from pyinjective.composer import Composer as ProtoMsgComposer
 from pyinjective.transaction import Transaction
 from pyinjective.client import Client
-from util.constant import *
 import traceback
 
 
@@ -31,8 +29,6 @@ class Demo(PerpTemplate):
         self.interval = int(self.setting["interval"])
         self.re_balance_interval_hour = self.setting["re_balance_interval_hour"]
         self.active_orders = {}  # [order_hash, : order_data]
-
-        self.quote_denom = denom_dict[self.quote_asset]
 
         self.leverage = float(self.setting["leverage"])
         self.order_size = float(self.setting["order_size"])
