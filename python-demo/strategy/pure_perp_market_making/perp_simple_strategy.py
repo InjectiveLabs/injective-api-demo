@@ -112,7 +112,7 @@ class Demo(PerpTemplate):
     def cal_signal(self):
         mid_price = (self.tick.bid_price_1 + self.tick.ask_price_1) / 2
 
-        half_spread = max(mid_price * self.spread_ratio / 2, 2 * self.tick_size)
+        half_spread = max(mid_price * self.spread_ratio / 2, 2 * float(self.tick_size))
         self.bid_price = mid_price - half_spread
         self.ask_price = mid_price + half_spread
 
