@@ -33,6 +33,11 @@ class Demo(PerpTemplate):
         self.leverage = float(self.setting["leverage"])
         self.order_size = float(self.setting["order_size"])
         self.spread_ratio = float(self.setting["spread_ratio"])
+        if self.spread_ratio < 0:
+            print("Warning! Your spread ratio is smaller than 0!")
+            print("According to Inj proposal 106, self-cross behavior may be banned, and can't get reward from current Trade&Earn Epoch.")
+            print("More details: https://hub.injective.network/proposals/106")
+            return
 
         self.gas_price = 500000000
         self.strategy_name = self.setting["strategy_name"]
@@ -107,7 +112,7 @@ class Demo(PerpTemplate):
     def cal_signal(self):
         mid_price = (self.tick.bid_price_1 + self.tick.ask_price_1) / 2
 
-        half_spread = mid_price * self.spread_ratio / 2
+        half_spread = max(mid_price * self.spread_ratio / 2, 2 * float(self.tick_size))
         self.bid_price = mid_price - half_spread
         self.ask_price = mid_price + half_spread
 
