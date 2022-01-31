@@ -15,6 +15,10 @@ from pyinjective.wallet import PrivateKey
 
 from data_manager import SmaDataManager
 
+import pyinjective
+
+import importlib.resources as pkg_resources
+
 
 _config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'config')
 
@@ -52,13 +56,13 @@ class InjectiveSpotStrategy(Strategy):
 
         # mainnet or testnet
         if configs.getboolean('is_mainnet'):
-            print('main_net')
+            print('mainnet')
             self._network = Network.mainnet()
-            ini_filename = "denoms_mainnet.ini"
+            ini_filename = pkg_resources.read_text(pyinjective, 'denoms_mainnet.ini')
         else:
-            print('test_net')
+            print('testnet')
             self._network = Network.testnet()
-            ini_filename = "denoms_testnet.ini"
+            ini_filename = pkg_resources.read_text(pyinjective, 'denoms_testnet.ini')
 
         print(f'========== Start to trading on Injective ==========')
         print(f"Network: {'mainnet' if configs.getboolean('is_mainnet') else 'testnet'}")
@@ -81,7 +85,7 @@ class InjectiveSpotStrategy(Strategy):
 
         # read network configs according to the market_id
         network_config = ConfigParser()
-        network_config.read(os.path.join(_config_dir, ini_filename))
+        network_config.read_string(ini_filename)
         for market_id in network_config.sections():
             description = network_config[market_id].get('description')
             if description and (description[9:-1] == f"Spot {self._pair}"):

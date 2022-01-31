@@ -120,7 +120,7 @@ class Demo(PerpTemplate):
             self.logger.critical("self.tick is None")
             return
         if self.ap1 >0 and self.bp1 > 0 and self.binance_ap1 > 0 and self.binance_bp1 > 0:
-            self.logger.critical("fail to get latest orderbook price")
+            self.logger.critical("failed to get latest orderbook price")
             return
 
         await self.get_address()
@@ -179,7 +179,7 @@ class Demo(PerpTemplate):
             ))
 
         self.logger.info(
-            "long {} {} @price{} on injecxtive exchange".format(self.order_size, self.base_asset, price))
+            "long {} {} @price{} on injective exchange".format(self.order_size, self.base_asset, price))
         (sim_res, success) = await self.send_tx()
         return (sim_res, success)
     
@@ -197,7 +197,7 @@ class Demo(PerpTemplate):
             ))
 
         self.logger.info(
-            "short {} {} @price{} on injecxtive exchange".format(self.order_size, self.base_asset, price))
+            "short {} {} @price{} on injective exchange".format(self.order_size, self.base_asset, price))
         (sim_res, success) = await self.send_tx()
         return (sim_res, success)
     
@@ -222,7 +222,7 @@ class Demo(PerpTemplate):
         sim_res_msg = ProtoMsgComposer.MsgResponses(
             sim_res.result.data, simulation=True)
         self.logger.info(
-            "simluation passed, simulation msg response {}".format(sim_res_msg))
+            "simulation passed, simulation msg response {}".format(sim_res_msg))
 
         # build tx
         gas_limit = sim_res.gas_info.gas_used + \

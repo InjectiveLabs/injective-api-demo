@@ -6,7 +6,6 @@ from pyinjective.async_client import AsyncClient
 from pyinjective.composer import Composer as ProtoMsgComposer
 from pyinjective.constant import Network
 from pyinjective.wallet import Address, PrivateKey, PublicKey
-from util.constant import *
 from util.decimal_utils import floor_to, round_to
 
 
