@@ -55,6 +55,7 @@ class InjectiveSpotStrategy(Strategy):
         quote: str,
         config: ConfigParser,
         network: Network,
+        insecure:bool,
         fee_recipient: str,
         private_key: str,
         min_base_balance: float = 10,
@@ -66,7 +67,7 @@ class InjectiveSpotStrategy(Strategy):
         self._market_id = get_market_id(base, quote, config)
         self._gas_price = 500000000
 
-        self._client = AsyncClient(network=network, insecure=True)
+        self._client = AsyncClient(network=network, insecure=insecure)
 
         self._composer = Composer(network=network.string())
 
@@ -806,7 +807,7 @@ class ExchangeClient(ABC):
 
 
 class InjectiveSpotClient(ExchangeClient):
-    def __init__(self, base: str, quote: str, config: ConfigParser, network: Network):
+    def __init__(self, base: str, quote: str, config: ConfigParser, network: Network, insecure:bool):
         self._base = base if base != "eth" else "weth"
         self._quote = quote
         self._strategies = []
@@ -814,7 +815,7 @@ class InjectiveSpotClient(ExchangeClient):
         self._market_id = get_market_id(base, quote, config)
         self._price_multiplier = get_price_multiplier(self._market_id, config)
         self._quantity_multiplier = get_quantity_multiplier(self._market_id, config)
-        self._client = AsyncClient(network=network, insecure=True)
+        self._client = AsyncClient(network=network, insecure=insecure)
 
         self.last_timestamp = 0
         self.best_bid_price = 0
@@ -974,7 +975,8 @@ async def run_all(
     quote: str,
     min_base_asset_balance: float,
     min_quote_asset_balance: float,
-    min_order_size=float,
+    min_order_size:float,
+    insecure:bool=True
 ):
     """
     set up all clients
@@ -984,13 +986,14 @@ async def run_all(
         quote,
         ini_config,
         network,
+        insecure,
         fee_recipient=inj_key,
         private_key=private_key,
         min_base_balance=min_base_asset_balance,
         min_quote_balance=min_quote_asset_balance,
         min_order_size=min_order_size,
     )
-    injective = InjectiveSpotClient(base, quote, ini_config, network)
+    injective = InjectiveSpotClient(base, quote, ini_config, network, insecure)
     injective.attach(injective_strategy)
     binance = BinanceSpotClient(base, quote)
     binance.attach(injective_strategy)
@@ -1022,8 +1025,10 @@ def run_cross_exchange_market_making(config, ini_config):
 
     if config["is_mainnet"] == "true":
         network = Network.mainnet()
+        insecure=True
     else:
         network = Network.testnet()
+        insecure=False
 
     if isinstance(inj_key, str) and isinstance(private_key, str):
         run(
@@ -1037,7 +1042,8 @@ def run_cross_exchange_market_making(config, ini_config):
                 min_base_asset_balance=min_base_asset_balance,
                 min_quote_asset_balance=min_quote_asset_balance,
                 min_order_size=min_order_size,
-            )
+                insecure=insecure,
+       )
         )
     else:
         print("Error in INJ KEY AND PRIVIATE KEY", type(inj_key), type(private_key))
