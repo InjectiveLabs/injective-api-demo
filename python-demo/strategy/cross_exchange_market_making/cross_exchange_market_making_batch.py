@@ -976,7 +976,7 @@ async def run_all(
     min_base_asset_balance: float,
     min_quote_asset_balance: float,
     min_order_size:float,
-    insecure:bool=True
+    insecure:bool=False
 ):
     """
     set up all clients
@@ -1025,7 +1025,7 @@ def run_cross_exchange_market_making(config, ini_config):
 
     if config["is_mainnet"] == "true":
         network = Network.mainnet()
-        insecure=True
+        insecure=False
     else:
         network = Network.testnet()
         insecure=False

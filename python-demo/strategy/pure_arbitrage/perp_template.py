@@ -53,7 +53,7 @@ class PerpTemplate(object):
 
         self.priv_key = PrivateKey.from_hex(setting["priv_key"])
         self.pub_key = self.priv_key.to_public_key()
-        self.client = AsyncClient(self.network, insecure=True)
+        self.client = AsyncClient(self.network, insecure=False)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.get_address())
         self.acc_id = self.address.get_subaccount_id(index=0)
