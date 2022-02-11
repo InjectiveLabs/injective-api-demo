@@ -69,7 +69,7 @@ class InjectiveSpotStrategy(Strategy):
         print(f'Trading pairs: {self._pair}')
 
         # create grpc client and composer for API communication
-        self._client = AsyncClient(self._network, insecure=True if configs.getboolean("is_mainnet") else False)
+        self._client = AsyncClient(self._network, insecure=False)
         self._composer = ProtoMsgComposer(network=self._network.string())
 
         print('Authorising......')
