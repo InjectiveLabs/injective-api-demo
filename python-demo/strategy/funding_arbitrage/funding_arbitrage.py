@@ -11,7 +11,7 @@ from pyinjective.client import Client
 from binance.enums import *
 import traceback
 from binance import AsyncClient, BinanceSocketManager
-
+import time
 
 class Demo(PerpTemplate):
     def __init__(self, setting, logger, mainnet_configs, testnet_configs):
@@ -81,9 +81,17 @@ class Demo(PerpTemplate):
         async for market in markets:
             # print(market)
             if market.market.market_id == self.market_id:
-                self.inj_funding_rate = float(
-                    market.market.perpetual_market_info.hourly_funding_rate_cap)
-                await self.on_funding_rates()
+                hourly_interest_rate = float(
+                    market.market.perpetual_market_info.hourly_interest_rate)
+                funding_cap = float(market.market.perpetual_market_info.hourly_funding_rate_cap)
+                cumulative_price = float(market.market.perpetual_market_funding.cumulative_price)
+                divisor = (time.time() % 3600 )* 24
+                twap_est = cumulative_price / divisor
+                self.inj_funding_rate = max(min(hourly_interest_rate + twap_est, funding_cap), -funding_cap)
+                
+                # Only execute in the last 30 mins
+                if time.time() % 3600 > 1800:
+                    await self.on_funding_rates()
 
     async def subscribe_binance_exchange_funding(self):
         binance_client = await AsyncClient.create()
