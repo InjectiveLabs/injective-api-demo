@@ -201,7 +201,7 @@ class Demo(PerpTemplate):
         (sim_res, success) = await self.send_tx()
         return (sim_res, success)
     
-    async def sned_tx(self):
+    async def send_tx(self):
         tx = (
                 Transaction()
                 .with_messages(* self.msg_list)
