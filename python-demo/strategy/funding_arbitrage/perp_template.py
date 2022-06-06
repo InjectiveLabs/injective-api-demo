@@ -5,9 +5,8 @@ from core.object import OrderData, PositionData, TickData, TradeData
 from pyinjective.async_client import AsyncClient
 from pyinjective.composer import Composer as ProtoMsgComposer
 from pyinjective.constant import Network
-from pyinjective.wallet import Address, PrivateKey, PublicKey
-from util.decimal_utils import floor_to, round_to
-
+from pyinjective.wallet import PrivateKey
+from util.decimal_utils import round_to
 
 class PerpTemplate(object):
     def __init__(self, setting, logger, mainnet_configs, testnet_configs):

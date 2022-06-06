@@ -10,7 +10,7 @@ from pyinjective.async_client import AsyncClient
 from datetime import datetime
 
 
-class PerpTemplate(object):
+class SpotTemplate(object):
     def __init__(self, setting, logger, mainnet_configs, testnet_configs):
         self.logger = logger
         self.symbol = setting["symbol"]
@@ -33,7 +33,7 @@ class PerpTemplate(object):
                 information = description.replace("'", "").split(" ")
                 market_type = information[1]
                 symbol = information[2]
-                if market_type == "Derivative" and symbol == pair:
+                if market_type == "Spot" and symbol == pair:
                     # Note: market_id of same traidng pair for testnet and mainnet are different.
                     # see more details from source code in injective-py
                     self.market_id = market_id
@@ -75,51 +75,50 @@ class PerpTemplate(object):
             self.network.lcd_endpoint
         )
 
-    """ perp market relationed function"""
+    """ spot market relationed function"""
 
     async def get_market(self):
-        market_response = await self.client.get_derivative_market(
-            market_id=self.market_id
-        )
+        market_response = await self.client.get_spot_market(market_id=self.market_id)
         self.logger.debug(market_response)
 
     async def stream_market(self):
-        markets = await self.client.stream_derivative_markets()
+        markets = await self.client.stream_spot_markets()
         async for market in markets:
             self.logger.debug(market)
 
-    """perp position related function"""
+    # """spot position related function"""
 
-    async def get_position(self):
-        positions = await self.client.get_derivative_positions(
-            market_id=self.market_id, subaccount_id=self.acc_id
-        )
-        return positions
+    # async def get_position(self):
+    #    positions = await self.client.get_derivative_positions(
+    #        market_id=self.market_id, subaccount_id=self.acc_id
+    #    )
+    #    return positions
 
-    async def get_liquidable_position(self):
-        liquidable_positions = await self.client.get_derivative_liquidable_positions(
-            market_id=self.market_id
-        )
-        self.logger.debug(liquidable_positions)
+    # async def get_liquidable_position(self):
+    #    liquidable_positions = await self.client.get_derivative_liquidable_positions(
+    #        market_id=self.market_id
+    #    )
+    #    self.logger.debug(liquidable_positions)
 
-    """perp order related function"""
+    """spot order related function"""
 
     async def get_open_orders(self, subacc_id, market_id):
 
-        orders = await self.client.get_derivative_subaccount_orders(
+        orders = await self.client.get_spot_subaccount_orders(
             subaccount_id=subacc_id, market_id=market_id
         )
         await self.on_open_orders(orders)
 
     async def get_orders(self, market_id, order_side, subaccount_id):
-        orders = await self.client.get_derivative_orders(
+        # orders = await self.client.get_derivative_orders(
+        orders = await self.client.get_spot_orders(
             market_id=market_id, order_side=order_side, subaccount_id=subaccount_id
         )
         self.logger.debug(orders)
         return orders
 
     async def get_orderbook(self):
-        orderbook = await self.client.get_derivative_orderbook(market_id=self.market_id)
+        orderbook = await self.client.get_spot_orderbook(market_id=self.market_id)
         print("\n-- Orderbook Update:\n", orderbook)
         tick_data = TickData()
         for i in range(
@@ -148,7 +147,7 @@ class PerpTemplate(object):
         await self.on_tick(tick_data)
 
     async def stream_orderbook(self, market_id):
-        orderbooks = await self.client.stream_derivative_orderbook(market_id=market_id)
+        orderbooks = await self.client.stream_spot_orderbook(market_id=market_id)
         async for orderbook in orderbooks:
             tick_data = TickData()
             for i in range(
@@ -213,7 +212,7 @@ class PerpTemplate(object):
         execution_side=None,
         direction=None,
     ):
-        trades = await self.client.stream_derivative_trades(
+        trades = await self.client.stream_spot_trades(
             market_id=market_id, subaccount_id=account_id
         )
         async for trade in trades:
@@ -243,7 +242,7 @@ class PerpTemplate(object):
             await self.on_trade(trade_data)
 
     async def stream_order(self, market_id, account_id=None, side=None):
-        orders = await self.client.stream_derivative_orders(
+        orders = await self.client.stream_spot_orders(
             market_id=market_id, subaccount_id=account_id
         )
         async for order in orders:
@@ -276,54 +275,54 @@ class PerpTemplate(object):
                 )
             await self.on_order(order_data)
 
-    async def stream_position(self, market_id, account_id):
-        positions = await self.client.stream_derivative_positions(
-            market_id=market_id, subaccount_id=account_id
-        )
-        async for position in positions:
-            self.logger.debug(position)
-            position_data = PositionData()
-            position_data.ticker = position.position.ticker
-            position_data.market_id = position.position.market_id
-            position_data.subaccount_id = position.position.subaccount_id
-            position_data.direction = position.position.direction
-            position_data.quantity = float(position.position.quantity) * pow(
-                10, -1 * self.base_decimal
-            )
-            position_data.mark_price = round_to(
-                float(position.position.mark_price)
-                * pow(10, self.base_decimal - self.quote_decimal),
-                self.tick_size,
-            )
-
-            if position.position.entry_price == "":
-                position_data.entry_price = 0
-            else:
-                position_data.entry_price = round_to(
-                    float(position.position.entry_price)
-                    * pow(10, self.base_decimal - self.quote_decimal),
-                    self.tick_size,
-                )
-
-            if position.position.margin != "":
-                position_data.margin = (
-                    float(position.position.margin) * self.base_decimal
-                    - self.quote_decimal
-                )
-
-            if position.position.liquidation_price != "":
-                position_data.liquidation_price = round_to(
-                    float(position.position.liquidation_price)
-                    * pow(10, self.base_decimal - self.quote_decimal),
-                    self.tick_size,
-                )
-
-            position_data.aggregate_reduce_only_quantity = float(
-                position.position.aggregate_reduce_only_quantity
-            ) * pow(10, -1 * self.base_decimal)
-            position_data.timestamp = position.timestamp
-            await self.on_position(position_data)
-
+    #    async def stream_position(self, market_id, account_id):
+    #        positions = await self.client.stream_derivative_positions(
+    #            market_id=market_id, subaccount_id=account_id
+    #        )
+    #        async for position in positions:
+    #            self.logger.debug(position)
+    #            position_data = PositionData()
+    #            position_data.ticker = position.position.ticker
+    #            position_data.market_id = position.position.market_id
+    #            position_data.subaccount_id = position.position.subaccount_id
+    #            position_data.direction = position.position.direction
+    #            position_data.quantity = float(position.position.quantity) * pow(
+    #                10, -1 * self.base_decimal
+    #            )
+    #            position_data.mark_price = round_to(
+    #                float(position.position.mark_price)
+    #                * pow(10, self.base_decimal - self.quote_decimal),
+    #                self.tick_size,
+    #            )
+    #
+    #            if position.position.entry_price == "":
+    #                position_data.entry_price = 0
+    #            else:
+    #                position_data.entry_price = round_to(
+    #                    float(position.position.entry_price)
+    #                    * pow(10, self.base_decimal - self.quote_decimal),
+    #                    self.tick_size,
+    #                )
+    #
+    #            if position.position.margin != "":
+    #                position_data.margin = (
+    #                    float(position.position.margin) * self.base_decimal
+    #                    - self.quote_decimal
+    #                )
+    #
+    #            if position.position.liquidation_price != "":
+    #                position_data.liquidation_price = round_to(
+    #                    float(position.position.liquidation_price)
+    #                    * pow(10, self.base_decimal - self.quote_decimal),
+    #                    self.tick_size,
+    #                )
+    #
+    #            position_data.aggregate_reduce_only_quantity = float(
+    #                position.position.aggregate_reduce_only_quantity
+    #            ) * pow(10, -1 * self.base_decimal)
+    #            position_data.timestamp = position.timestamp
+    #            await self.on_position(position_data)
+    #
     async def stream_subaccount_balance(self, account_id):
         subaccount = await self.client.stream_subaccount_balance(account_id)
         async for balance in subaccount:

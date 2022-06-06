@@ -1,4 +1,4 @@
-from perp_template import PerpTemplate
+from spot_template import SpotTemplate
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
@@ -13,7 +13,7 @@ from pyinjective.client import Client
 import traceback
 
 
-class Demo(PerpTemplate):
+class Demo(SpotTemplate):
     def __init__(self, setting, logger, mainnet_configs, testnet_configs):
         super().__init__(setting, logger, mainnet_configs, testnet_configs)
         self.setting = setting
@@ -53,7 +53,7 @@ class Demo(PerpTemplate):
 
         self.add_schedule()
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.get_init_position())
+        # loop.run_until_complete(self.get_init_position())
         loop.run_until_complete(self.get_open_orders(self.acc_id, self.market_id))
         loop.run_until_complete(self.get_orderbook())
         self.msg_list = []
@@ -76,7 +76,7 @@ class Demo(PerpTemplate):
         self.tasks = [
             asyncio.Task(self.stream_order(self.market_id, self.acc_id)),
             asyncio.Task(self.stream_trade(self.market_id, self.acc_id)),
-            asyncio.Task(self.stream_position(self.market_id, self.acc_id)),
+            # asyncio.Task(self.stream_position(self.market_id, self.acc_id)),
             asyncio.Task(self.stream_orderbook(self.market_id)),
         ]
 
@@ -87,19 +87,19 @@ class Demo(PerpTemplate):
         self.logger.info("start...")
         loop.run_until_complete(asyncio.gather(*self.tasks))
 
-    async def get_init_position(self):
-        position = await self.get_position()
-        if len(position.positions) > 0:
-            position_data = position.positions[0]
-            self.net_position = (
-                float(position_data.quantity)
-                if position_data.direction == "long"
-                else -float(position_data.quantity)
-            )
-            self.logger.info(f"net position in {self.symbol}:{self.net_position}")
-        else:
-            self.logger.info("net position is zero")
-            self.net_position = 0.0
+    # async def get_init_position(self):
+    #    position = await self.get_position()
+    #    if len(position.positions) > 0:
+    #        position_data = position.positions[0]
+    #        self.net_position = (
+    #            float(position_data.quantity)
+    #            if position_data.direction == "long"
+    #            else -float(position_data.quantity)
+    #        )
+    #        self.logger.info(f"net position in {self.symbol}:{self.net_position}")
+    #    else:
+    #        self.logger.info("net position is zero")
+    #        self.net_position = 0.0
 
     async def on_tick(self, tick_data: TickData):
         self.tick = tick_data
@@ -217,23 +217,23 @@ class Demo(PerpTemplate):
     async def on_trade(self, trade_data):
         pass
 
-    async def on_position(self, position_data: PositionData):
-        self.net_position = (
-            position_data.quantity
-            if position_data.direction == "long"
-            else -position_data.quantity
-        )
+    # async def on_position(self, position_data: PositionData):
+    #    self.net_position = (
+    #        position_data.quantity
+    #        if position_data.direction == "long"
+    #        else -position_data.quantity
+    #    )
 
     def quote_bid_ask(self):
         self.msg_list.append(
-            self.composer.MsgCreateDerivativeLimitOrder(
+            self.composer.MsgCreateSpotLimitOrder(
+                # self.composer.MsgCreateDerivativeLimitOrder(
                 market_id=self.market_id,
                 sender=self.sender,
                 subaccount_id=self.acc_id,
                 fee_recipient=self.fee_recipient,
                 price=floor_to(self.bid_price, self.tick_size),
                 quantity=floor_to(self.order_size, self.step_size),
-                leverage=self.leverage,
                 is_buy=True,
             )
         )
@@ -241,14 +241,13 @@ class Demo(PerpTemplate):
         self.logger.info("long {}btc @price{}".format(self.order_size, self.bid_price))
 
         self.msg_list.append(
-            self.composer.MsgCreateDerivativeLimitOrder(
+            self.composer.MsgCreateSpotLimitOrder(
                 market_id=self.market_id,
                 sender=self.sender,
                 subaccount_id=self.acc_id,
                 fee_recipient=self.fee_recipient,
                 price=floor_to(self.ask_price, self.tick_size),
                 quantity=floor_to(self.order_size, self.step_size),
-                leverage=self.leverage,
                 is_buy=False,
             )
         )
@@ -257,7 +256,7 @@ class Demo(PerpTemplate):
     def cancel_all(self):
         for order_hash in self.active_orders.keys():
             self.msg_list.append(
-                self.composer.MsgCancelDerivativeOrder(
+                self.composer.MsgCancelSpotOrder(
                     sender=self.sender,
                     market_id=self.market_id,
                     subaccount_id=self.acc_id,

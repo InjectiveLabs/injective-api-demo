@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import traceback
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from configparser import ConfigParser
 import pyinjective
 
@@ -18,10 +19,10 @@ sys.path.insert(0, MAIN_DIR)
 
 if __name__ == "__main__":
     from util.misc import restart_program
-    from funding_arbitrage import Demo
+    from spot_simple_strategy import Demo
 
     log_dir = "./log"
-    log_name = "./funding_arb_demo.log"
+    log_name = "./perp_demo.log"
     config_name = "configs.ini"
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
@@ -41,6 +42,7 @@ if __name__ == "__main__":
     logging.getLogger().addHandler(console)
     logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
 
+    logging.info(f"config dir: {CONFIG_DIR}")
     configs = ConfigParser()
     configs.read(os.path.join(CONFIG_DIR, config_name))
     mainnet_configs = ConfigParser()
@@ -49,10 +51,13 @@ if __name__ == "__main__":
     testnet_configs.read_string(denoms_testnet)
 
     try:
-        perp_demo = Demo(
-            configs["funding arbitrage"], logging, mainnet_configs, testnet_configs
+        spot_demo = Demo(
+            configs["pure perp market making"],
+            logging,
+            mainnet_configs,
+            testnet_configs,
         )
-        perp_demo.start()
+        spot_demo.start()
     except Exception as e:
         logging.CRITICAL(traceback.format_exc())
         logging.info("restarting program...")
