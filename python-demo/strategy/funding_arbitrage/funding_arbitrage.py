@@ -2,12 +2,11 @@ from perp_template import PerpTemplate
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
-from core.object import OrderData, PositionData, TradeData, TickData
+from core.object import OrderData, PositionData, TickData
 from math import fabs
 from util.decimal_utils import floor_to, ceil_to
 from pyinjective.composer import Composer as ProtoMsgComposer
 from pyinjective.transaction import Transaction
-from pyinjective.client import Client
 from binance.enums import *
 import traceback
 from binance import AsyncClient, BinanceSocketManager
@@ -306,7 +305,7 @@ class Demo(PerpTemplate):
 
         # build tx
         gas_limit = sim_res.gas_info.gas_used + \
-            15000  # add 15k for gas, fee computation
+            20000  # add 20k for gas, fee computation
         fee = [self.composer.Coin(
             amount=self.gas_price * gas_limit,
             denom=self.network.fee_denom,
@@ -320,7 +319,7 @@ class Demo(PerpTemplate):
         tx_raw_bytes = tx.get_tx_data(sig, self.pub_key)
 
         # broadcast tx: send_tx_async_mode, send_tx_sync_mode, send_tx_block_mode
-        res = await self.client.send_tx_async_mode(tx_raw_bytes)
+        res = await self.client.send_tx_sync_mode(tx_raw_bytes)
 
         return (sim_res, success)
 
