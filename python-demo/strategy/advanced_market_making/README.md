@@ -24,7 +24,9 @@ High-frequency trading in a limit order book, Marco Avellaneda & Sasha Stoikov [
 
 
 ### Some related discussions about the model:
+
 [Parameter fitting](https://quant.stackexchange.com/questions/36073/how-does-one-calibrate-lambda-in-a-avellaneda-stoikov-market-making-problem)
+
 [Model limitations](https://quant.stackexchange.com/questions/36400/avellaneda-stoikov-market-making-model)
 
 
