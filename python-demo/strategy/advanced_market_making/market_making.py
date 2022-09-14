@@ -37,14 +37,14 @@ from market_making_template import MarketMaker
 class PerpMarketMaker(MarketMaker):
     def __init__(
         self,
-        avellanda_stoikov_configs: SectionProxy,
+        avellaneda_stoikov_configs: SectionProxy,
     ):
 
-        priv_key = avellanda_stoikov_configs["private_key"]
-        nodes = avellanda_stoikov_configs["nodes"].split(",")
-        super().__init__(avellanda_stoikov_configs)
+        priv_key = avellaneda_stoikov_configs["private_key"]
+        nodes = avellaneda_stoikov_configs["nodes"].split(",")
+        super().__init__(avellaneda_stoikov_configs)
         self.nodes = nodes
-        self.is_mainnet = avellanda_stoikov_configs.getboolean("is_mainnet", False)
+        self.is_mainnet = avellaneda_stoikov_configs.getboolean("is_mainnet", False)
         self.node_index, self.network, insecure = switch_network(
             self.nodes, 0, self.is_mainnet
         )
@@ -58,49 +58,49 @@ class PerpMarketMaker(MarketMaker):
         logging.info("Subaccount ID: %s" % self.subaccount_id)
 
         self.fee_recipient = "inj1wrg096y69grgf8yg6tqxnh0tdwx4x47rsj8rs3"
-        self.update_interval = avellanda_stoikov_configs.getint("update_interval", 60)
+        self.update_interval = avellaneda_stoikov_configs.getint("update_interval", 60)
         logging.info("update interval: %d" % self.update_interval)
 
         ############################
         self.position = PositionDerivative()
-        if avellanda_stoikov_configs.get("base") and avellanda_stoikov_configs.get(
+        if avellaneda_stoikov_configs.get("base") and avellaneda_stoikov_configs.get(
             "quote"
         ):
             self.market = MarketDerivative(
-                base=avellanda_stoikov_configs["base"],
-                quote=avellanda_stoikov_configs["quote"],
+                base=avellaneda_stoikov_configs["base"],
+                quote=avellaneda_stoikov_configs["quote"],
                 network=self.network,
                 is_mainnet=self.is_mainnet,
             )
         else:
             raise Exception("invalid base or quote ticker")
         self.balance = BalanceDerivative(
-            available_balance=avellanda_stoikov_configs.getfloat(
+            available_balance=avellaneda_stoikov_configs.getfloat(
                 "available_balance", 10.0
             )
         )
         self.ask_price = 0
         self.bid_price = 0
 
-        self.n_orders = avellanda_stoikov_configs.getint("n_orders", 5)
+        self.n_orders = avellaneda_stoikov_configs.getint("n_orders", 5)
         logging.info("n_orders: %s" % self.n_orders)
-        self.leverage = avellanda_stoikov_configs.getfloat("leverage", 1)
+        self.leverage = avellaneda_stoikov_configs.getfloat("leverage", 1)
         logging.info("leverage: %s" % self.leverage)
 
         # Avellaneda Stoikov model parameters
-        self.gamma = avellanda_stoikov_configs.getfloat("gamma", 0.7)
-        self.sigma = avellanda_stoikov_configs.getfloat("sigma", 0.7)  # market STD
-        self.position_max = avellanda_stoikov_configs.getint(
+        self.gamma = avellaneda_stoikov_configs.getfloat("gamma", 0.7)
+        self.sigma = avellaneda_stoikov_configs.getfloat("sigma", 0.7)  # market STD
+        self.position_max = avellaneda_stoikov_configs.getint(
             "position_max", 10
         )  # our tolerance to the position
-        self.limit_horizon = avellanda_stoikov_configs.getboolean(
+        self.limit_horizon = avellaneda_stoikov_configs.getboolean(
             "limit_horizon", False
         )  # is this a inifinite horizon model or finite horizon model
-        self.kappa = avellanda_stoikov_configs.getfloat(
+        self.kappa = avellaneda_stoikov_configs.getfloat(
             "kappa", 1.5
         )  # Order filling rate
-        self.dt = avellanda_stoikov_configs.getfloat("dt", 3)
-        self.T = avellanda_stoikov_configs.getint("T", 600)
+        self.dt = avellaneda_stoikov_configs.getfloat("dt", 3)
+        self.T = avellaneda_stoikov_configs.getint("T", 600)
 
         self.orders: Dict[str, SortedList] = {
             "bids": SortedList(),
@@ -113,10 +113,10 @@ class PerpMarketMaker(MarketMaker):
         self.tob_ask_price = 0
         self.sob_best_ask_price = 0
 
-        self.last_order_delta = avellanda_stoikov_configs.getfloat(
+        self.last_order_delta = avellaneda_stoikov_configs.getfloat(
             "last_order_delta", 0.40
         )
-        self.first_order_delta = avellanda_stoikov_configs.getfloat(
+        self.first_order_delta = avellaneda_stoikov_configs.getfloat(
             "first_order_delta", 0.05
         )
         logging.info(
@@ -124,25 +124,25 @@ class PerpMarketMaker(MarketMaker):
             % (self.first_order_delta, self.last_order_delta)
         )
 
-        self.first_asset_allocation = avellanda_stoikov_configs.getfloat(
+        self.first_asset_allocation = avellaneda_stoikov_configs.getfloat(
             "first_asset_allocation", 0
         )
-        self.last_asset_allocation = avellanda_stoikov_configs.getfloat(
+        self.last_asset_allocation = avellaneda_stoikov_configs.getfloat(
             "last_asset_allocation", 0.4
         )
 
-        self.estimated_fee_ratio = avellanda_stoikov_configs.getfloat(
+        self.estimated_fee_ratio = avellaneda_stoikov_configs.getfloat(
             "estimated_fee_ratio", 0.005
         )
         self.initial_margin_ratio = 1
 
-        self.bid_total_asset_allocation = avellanda_stoikov_configs.getfloat(
+        self.bid_total_asset_allocation = avellaneda_stoikov_configs.getfloat(
             "bid_total_asset_allocation", 0.09
         ) * (
             1 - self.estimated_fee_ratio
         )  # fraction of total asset
         logging.info("bid_total_asset_allocation: %s" % self.bid_total_asset_allocation)
-        self.ask_total_asset_allocation = avellanda_stoikov_configs.getfloat(
+        self.ask_total_asset_allocation = avellaneda_stoikov_configs.getfloat(
             "ask_total_asset_allocation", 0.11
         ) * (
             1 - self.estimated_fee_ratio

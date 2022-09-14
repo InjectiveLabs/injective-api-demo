@@ -40,7 +40,7 @@ if __name__ == "__main__":
     loop = get_event_loop()
 
     perp_market_maker = PerpMarketMaker(
-        avellanda_stoikov_configs=configs["AVELLANDA_STOIKOV"],
+        avellaneda_stoikov_configs=configs["AVELLANEDA_STOIKOV"],
     )
     signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
     for s in signals:
