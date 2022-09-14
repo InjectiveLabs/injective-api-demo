@@ -20,9 +20,9 @@
 | estimated_fee_ratio       | estimated trading fee as percentage of order value                |
 
 
-![title](./.images/orderbook.png)
+![orderbook](./.images/orderbook.png)
 
-![title](./.images/orderbook.png)
+![openorders](./.images/orderbook.png)
 
 High-frequency trading in a limit order book, Marco Avellaneda & Sasha Stoikov
 
