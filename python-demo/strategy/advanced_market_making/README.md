@@ -22,7 +22,7 @@
 
 ![orderbook](./.images/orderbook.png)
 
-![openorders](./.images/orderbook.png)
+![openorders](./.images/Openorders.png)
 
 High-frequency trading in a limit order book, Marco Avellaneda & Sasha Stoikov
 
