@@ -1,6 +1,6 @@
 # Avellaneda Stoikov HFT Market Making BOT
 | Parameter                 | Description |
-| :---                      |    :----:   |
+| :---:                      |    :----   |
 | limit_horizon             | finite horizon market making or infinite horizon market making    |
 | update_interval           | how often do we want to update our orders                         |
 | position_max              | maximum allowed position                                          |
@@ -20,7 +20,9 @@
 | estimated_fee_ratio       | estimated trading fee as percentage of order value                |
 
 
-High-frequency trading in a limit order book, Marco Avellaneda & Sasha Stoikov [paper url](https://www.researchgate.net/publication/24086205_High_Frequency_Trading_in_a_Limit_Order_Book).
+High-frequency trading in a limit order book, Marco Avellaneda & Sasha Stoikov
+
+[paper url](https://www.researchgate.net/publication/24086205_High_Frequency_Trading_in_a_Limit_Order_Book).
 
 
 ### Some related discussions about the model:
