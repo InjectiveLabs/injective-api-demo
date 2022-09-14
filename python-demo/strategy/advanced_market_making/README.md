@@ -1,24 +1,28 @@
 # Avellaneda Stoikov HFT Market Making BOT
 | Parameter                 | Description |
-| :---:                      |    :----   |
+| :---                      |    :----   |
 | limit_horizon             | finite horizon market making or infinite horizon market making    |
 | update_interval           | how often do we want to update our orders                         |
 | position_max              | maximum allowed position                                          |
 | sigma                     | market volatility                                                 |
 | kappa                     | order filling rate                                                |
-| gamma                     | risk averseness                                                   |
+| gamma                     | our risk averseness towards inventory                                                   |
 | dt                        | time step                                                         |
 | T                         | Total time of market market, only matters if we choose to market making in finite horizon                                    |
 | n_orders                  | number of orders on each side                                     |
 | available_balance         | total balance for market making                                   |
 | first_order_delta         | highest bid price or lowest ask price that is allowed minimum distance from tob  |
 | last_order_delta          | lowest bid price and highest ask price that is allowed maximum distance from tob |
-| ask_total_asset_allocation| portion of asset allocated to ask side                            |
-| bid_total_asset_allocation| portion of asset allocated to bid side                            |
-| first_asset_allocation    | relative weights of the first order asset allocation to other orders asset allocation |
+| ask_total_asset_allocation| percentage of available balance allocated to ask side                            |
+| bid_total_asset_allocation| percentage of available balance allocated to bid side                            |
+| first_asset_allocation    | extra relative weights of the first order asset allocation to other orders asset allocation |
 | last_asset_allocation     | relative weights of the last order asset allocation to first orders asset allocation|
 | estimated_fee_ratio       | estimated trading fee as percentage of order value                |
 
+
+![title](./.images/orderbook.png)
+
+![title](./.images/orderbook.png)
 
 High-frequency trading in a limit order book, Marco Avellaneda & Sasha Stoikov
 
