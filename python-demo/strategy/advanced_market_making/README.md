@@ -28,12 +28,14 @@ This advanced HFT market making bot has taken into account of market volalitity 
 ![openorders](./.images/Openorders.png)
 
 High-frequency trading in a limit order book,
+
 [Marco Avellaneda & Sasha Stoikov paper](https://www.researchgate.net/publication/24086205_High_Frequency_Trading_in_a_Limit_Order_Book).
 
 
 ### Some related discussions about the model:
 
 [Parameter fitting](https://quant.stackexchange.com/questions/36073/how-does-one-calibrate-lambda-in-a-avellaneda-stoikov-market-making-problem)
+
 [Model limitations](https://quant.stackexchange.com/questions/36400/avellaneda-stoikov-market-making-model)
 
 
