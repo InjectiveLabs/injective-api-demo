@@ -1,4 +1,7 @@
 # Avellaneda Stoikov HFT Market Making BOT
+
+This advanced HFT market making bot has taken into account of market volalitity risk, inventory risk and order stack management. It is highly configurable for different markets for generating different risk profiles and profit profiles when it runs in production environment. 
+
 | Parameter                 | Description |
 | :---                      |    :----   |
 | limit_horizon             | finite horizon market making or infinite horizon market making    |
@@ -24,15 +27,13 @@
 
 ![openorders](./.images/Openorders.png)
 
-High-frequency trading in a limit order book, Marco Avellaneda & Sasha Stoikov
-
-[paper url](https://www.researchgate.net/publication/24086205_High_Frequency_Trading_in_a_Limit_Order_Book).
+High-frequency trading in a limit order book,
+[Marco Avellaneda & Sasha Stoikov paper](https://www.researchgate.net/publication/24086205_High_Frequency_Trading_in_a_Limit_Order_Book).
 
 
 ### Some related discussions about the model:
 
 [Parameter fitting](https://quant.stackexchange.com/questions/36073/how-does-one-calibrate-lambda-in-a-avellaneda-stoikov-market-making-problem)
-
 [Model limitations](https://quant.stackexchange.com/questions/36400/avellaneda-stoikov-market-making-model)
 
 
