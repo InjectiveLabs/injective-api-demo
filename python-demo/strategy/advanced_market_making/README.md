@@ -1,6 +1,6 @@
 # Avellaneda Stoikov HFT Market Making BOT
 
-This advanced HFT market making bot has taken into account of market volalitity risk, inventory risk and order stack management. It is highly configurable for different markets for generating different risk profiles and profit profiles when it runs in production environment. 
+This advanced HFT market making bot has taken into account market volalitity risk, inventory risk and order stack management. It is highly configurable for different markets for generating distinct risk profiles when it is deployed in a production environment.
 
 | Parameter                 | Description |
 | :---                      |    :----   |
