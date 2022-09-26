@@ -159,44 +159,44 @@ def config_check(config):
 
     range_check(
         "update_interval",
-        config["AVELLANDA_STOIKOV"].getint("update_interval"),
+        config["AVELLANEDA_STOIKOV"].getint("update_interval"),
         1,
         6000,
     )
-    range_check("n_orders", config["AVELLANDA_STOIKOV"].getint("n_orders"), 1, 19)
+    range_check("n_orders", config["AVELLANEDA_STOIKOV"].getint("n_orders"), 1, 19)
     range_check(
         "first_order_delta",
-        config["AVELLANDA_STOIKOV"].getfloat("first_order_delta"),
+        config["AVELLANEDA_STOIKOV"].getfloat("first_order_delta"),
         0,
         0.20,
     )
     range_check(
         "last_order_delta",
-        config["AVELLANDA_STOIKOV"].getfloat("last_order_delta"),
+        config["AVELLANEDA_STOIKOV"].getfloat("last_order_delta"),
         0.01,
         0.03,
     )
     range_check(
         "ask_total_asset_allocation",
-        config["AVELLANDA_STOIKOV"].getfloat("ask_total_asset_allocation"),
+        config["AVELLANEDA_STOIKOV"].getfloat("ask_total_asset_allocation"),
         0.05,
         0.60,
     )
     range_check(
         "bid_total_asset_allocation",
-        config["AVELLANDA_STOIKOV"].getfloat("bid_total_asset_allocation"),
+        config["AVELLANEDA_STOIKOV"].getfloat("bid_total_asset_allocation"),
         0.05,
         0.60,
     )
     range_check(
         "first_asset_allocation",
-        config["AVELLANDA_STOIKOV"].getfloat("first_asset_allocation"),
+        config["AVELLANEDA_STOIKOV"].getfloat("first_asset_allocation"),
         0,
         0.05,
     )
     range_check(
         "last_asset_allocation",
-        config["AVELLANDA_STOIKOV"].getfloat("last_asset_allocation"),
+        config["AVELLANEDA_STOIKOV"].getfloat("last_asset_allocation"),
         0.9,
         1.2,
     )
