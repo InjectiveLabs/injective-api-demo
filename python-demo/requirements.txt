@@ -1,5 +1,5 @@
 aiohttp==3.8.1
 APScheduler==3.8.1
-injective_py==0.5.5.7
+injective_py==0.5.8.5
 six==1.15.0
-
+sortedcontainers==2.4.0
