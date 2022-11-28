@@ -34,6 +34,28 @@ class MarketDerivative(Market):
                     f"{self.base_ticker.upper()}/{self.quote_ticker.upper()}"
                     in self.config.get(section, "description")
                     and "Derivative" in self.config.get(section, "description")
+                    and "PERP" in self.config.get(section, "description")
+                ):
+                    self.market_id = section
+
+                    self.market_denom = Denom.load_market(network.env, self.market_id)
+                    
+class MarketDerivativeFutures(Market):
+    def __init__(self, base: str, quote: str, network: Network, is_mainnet: bool):
+        super().__init__(base, quote, is_mainnet)
+
+        self.quote_peggy, self.quote_decimals = Denom.load_peggy_denom(
+            network, self.quote_ticker.upper()
+        )
+        self.quote_multiplier = pow(10, self.quote_decimals)
+
+        for section in self.config.sections():
+            if len(section) == 66:
+                if (
+                    f"{self.base_ticker.upper()}/{self.quote_ticker.upper()}"
+                    in self.config.get(section, "description")
+                    and "Derivative" in self.config.get(section, "description")
+                    and not "PERP" in self.config.get(section, "description")
                 ):
                     self.market_id = section
 
