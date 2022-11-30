@@ -816,15 +816,11 @@ class PerpMarketMaker(MarketMaker):
         (sim_res, success) = await self.client.simulate_tx(sim_tx_raw_bytes)
         logging.debug("success: %s sim_res %s" % (success, sim_res))
 
-        if not success and update_sequence:
+        if not success:
             logging.info(f"success: {success}")
             logging.info(f"failed in simulate {sim_res}")
+            self.address.init_num_seq(self.network.lcd_endpoint)
             raise Exception(f"failed in simulate {sim_res}")
-        elif not success and update_sequence==False:
-            logging.info(f"success: {success}")
-            logging.info(f"failed in simulate {sim_res}")
-            logging.info("trying again with a newly requested account sequence")
-            return self._send_message(msg,skip_unpack_msg,new_only,True,idx,is_first_batch)
 
         sim_res_msg = self.composer.MsgResponses(sim_res.result.data, simulation=True)
         logging.debug(f"simulation {sim_res_msg}")
