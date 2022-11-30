@@ -702,7 +702,7 @@ class PerpMarketMaker(MarketMaker):
                 derivative_orders_to_create=new_orders,
                 derivative_orders_to_cancel=old_orders,
             )
-            res = await self._send_message(msg, idx=i)
+            res = await self.send_message(msg, idx=i)
             logging.info("finished replace layer %d th send message %s\n" % (i, res))
         else:
             logging.info("place layer %d orders", i)
@@ -710,7 +710,7 @@ class PerpMarketMaker(MarketMaker):
                 sender=self.address.to_acc_bech32(),
                 derivative_orders_to_create=new_orders,
             )
-            res = await self._send_message(msg, new_only=True, idx=i)
+            res = await self.send_message(msg, new_only=True, idx=i)
             logging.info("finished replace layer %d th send message %s\n" % (i, res))
         return res
 
@@ -783,8 +783,30 @@ class PerpMarketMaker(MarketMaker):
 
         msg = self.first_batch()
         logging.debug(f"first batch msg {msg}")
-        res = await self._send_message(msg, new_only=True, idx=0, is_first_batch=True)
+        res = await self.send_message(msg, new_only=True, idx=0, is_first_batch=True)
         return res
+
+    async def send_message(
+        self,
+        msg,
+        skip_unpack_msg=True,
+        new_only=False,
+        update_sequence=False,
+        idx: int = 0,
+        is_first_batch=False,
+        safe=False
+    ):
+        if not safe:
+            try:
+                return await self._send_message(msg,skip_unpack_msg,new_only,update_sequence,idx,is_first_batch)
+            except Exception as e:
+                if 'account sequence mismatch' in str(e):
+                    return await self._send_message(msg,skip_unpack_msg,new_only,True,idx,is_first_batch)
+            else:
+                raise e
+        else:
+            return await self._send_message(msg,skip_unpack_msg,new_only,update_sequence,idx,is_first_batch)
+
 
     async def _send_message(
         self,
@@ -1513,7 +1535,7 @@ class PerpMarketMaker(MarketMaker):
             subaccount_id=self.subaccount_id,
             derivative_market_ids_to_cancel_all=[self.market.market_id],
         )
-        await self._send_message(msg, skip_unpack_msg=True)
+        await self.send_message(msg, skip_unpack_msg=True)
 
     async def increase_margin(self):
         # prepare tx msg
@@ -1527,7 +1549,7 @@ class PerpMarketMaker(MarketMaker):
                 destination_subaccount_id=self.subaccount_id,
                 amount=round(self.position.margin * 0.15, 4),
             )
-            await self._send_message(msg, skip_unpack_msg=True)
+            await self.send_message(msg, skip_unpack_msg=True)
             self.margin_event.clear()
             logging.info("finished increase_margin event")
 
