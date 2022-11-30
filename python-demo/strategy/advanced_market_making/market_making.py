@@ -791,7 +791,7 @@ class PerpMarketMaker(MarketMaker):
         msg,
         skip_unpack_msg=True,
         new_only=False,
-        update_sequence=True,
+        update_sequence=False,
         idx: int = 0,
         is_first_batch=False,
     ):
@@ -816,10 +816,15 @@ class PerpMarketMaker(MarketMaker):
         (sim_res, success) = await self.client.simulate_tx(sim_tx_raw_bytes)
         logging.debug("success: %s sim_res %s" % (success, sim_res))
 
-        if not success:
+        if not success and update_sequence:
             logging.info(f"success: {success}")
             logging.info(f"failed in simulate {sim_res}")
             raise Exception(f"failed in simulate {sim_res}")
+        elif not success and update_sequence==False:
+            logging.info(f"success: {success}")
+            logging.info(f"failed in simulate {sim_res}")
+            logging.info("trying again with a newly requested account sequence")
+            return self._send_message(msg,skip_unpack_msg,new_only,True,idx,is_first_batch)
 
         sim_res_msg = self.composer.MsgResponses(sim_res.result.data, simulation=True)
         logging.debug(f"simulation {sim_res_msg}")
@@ -910,11 +915,7 @@ class PerpMarketMaker(MarketMaker):
         logging.debug("tx msg response")
         logging.debug(res_msg)
         return res_msg
-
-    # async def market_making_strategy(self):
-    #    await self.send_first_batch()
-    #    await self.replace_orders()
-
+        
     async def balance_stream(self):
 
         subaccount = await self.client.stream_subaccount_balance(self.subaccount_id)
