@@ -57,7 +57,7 @@ class PerpMarketMaker(MarketMaker):
         self.subaccount_id = self.address.get_subaccount_id(index=0)
         logging.info("Subaccount ID: %s" % self.subaccount_id)
 
-        self.fee_recipient = "inj1wrg096y69grgf8yg6tqxnh0tdwx4x47rsj8rs3"
+        self.fee_recipient = "inj1xefevqpwr97me59jmkg8mf5auqcf5vgtz7kc85"
         self.update_interval = avellaneda_stoikov_configs.getint("update_interval", 60)
         logging.info("update interval: %d" % self.update_interval)
 
@@ -1313,17 +1313,17 @@ class PerpMarketMaker(MarketMaker):
         asks = orderbook.orderbook.sells
 
         self.tob_bid_price = derivative_price_from_backend(
-            int(bids[0].price), self.market.market_denom
+            float(bids[0].price), self.market.market_denom
         )
         self.tob_ask_price = derivative_price_from_backend(
-            int(asks[0].price), self.market.market_denom
+            float(asks[0].price), self.market.market_denom
         )
 
         self.sob_bid_price = derivative_price_from_backend(
-            int(bids[1].price), self.market.market_denom
+            float(bids[1].price), self.market.market_denom
         )
         self.sob_ask_price = derivative_price_from_backend(
-            int(asks[1].price), self.market.market_denom
+            float(asks[1].price), self.market.market_denom
         )
 
     async def onetime_oracle_price(self):
