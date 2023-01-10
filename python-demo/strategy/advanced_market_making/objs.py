@@ -39,7 +39,8 @@ class MarketDerivative(Market):
                     self.market_id = section
 
                     self.market_denom = Denom.load_market(network.env, self.market_id)
-                    
+
+
 class MarketDerivativeFutures(Market):
     def __init__(self, base: str, quote: str, network: Network, is_mainnet: bool):
         super().__init__(base, quote, is_mainnet)
