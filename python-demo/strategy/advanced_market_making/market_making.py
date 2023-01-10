@@ -82,6 +82,9 @@ class PerpMarketMaker(MarketMaker):
         self.ask_price = 0
         self.bid_price = 0
 
+        self.min_price_tick_size= self.market.market_denom.min_price_tick_size 
+        self.min_quantity_tick_size= self.market.market_denom.min_quantity_tick_size
+
         self.n_orders = avellaneda_stoikov_configs.getint("n_orders", 5)
         logging.info("n_orders: %s" % self.n_orders)
         self.leverage = avellaneda_stoikov_configs.getfloat("leverage", 1)
@@ -154,7 +157,7 @@ class PerpMarketMaker(MarketMaker):
         logging.info("tob_asset_allocation: %s", self.tob_asset_allocation)
         self.asset_deltas = self._compute_asset_delta()
 
-        self.current_order_size = 0.0001
+        self.current_order_size = self.min_quantity_tick_size
 
         self.max_bid_order_size = 0.0
         self.max_ask_order_size = 0.0
@@ -223,11 +226,11 @@ class PerpMarketMaker(MarketMaker):
 
         bid_price = round(
             bid_base * (1 - self.price_delta_ratio * i) - random(),
-            4,
+            self.min_price_tick_size,
         )
         ask_price = round(
             ask_base * (1 + self.price_delta_ratio * i) + random(),
-            4,
+            self.min_price_tick_size,
         )
         return bid_price, ask_price
 
@@ -255,7 +258,7 @@ class PerpMarketMaker(MarketMaker):
                     self.balance.available_balance * self.bid_total_asset_allocation,
                 )
             )
-            bid_price = round(self.oracle_price * 0.75, 4)
+            bid_price = round(self.oracle_price * 0.75, self.min_price_tick_size)
             success = False
 
         ask_required_margin = (
@@ -273,17 +276,17 @@ class PerpMarketMaker(MarketMaker):
                     self.balance.available_balance * self.ask_total_asset_allocation,
                 )
             )
-            ask_price = round(self.oracle_price * 1.25, 4)
+            ask_price = round(self.oracle_price * 1.25, self.min_price_tick_size)
             success = False
 
         return success, bid_price, ask_price
 
     def _compute_asset_allocation(self, i: int) -> Tuple[float, float]:
         bid_asset_allocation = truncate_float(
-            self.tob_asset_allocation[0] + self.asset_deltas[0] * i, 5
+            self.tob_asset_allocation[0] + self.asset_deltas[0] * i, self.min_quantity_tick_size
         )
         ask_asset_allocation = truncate_float(
-            self.tob_asset_allocation[1] + self.asset_deltas[1] * i, 5
+            self.tob_asset_allocation[1] + self.asset_deltas[1] * i, self.min_quantity_tick_size
         )
         return bid_asset_allocation, ask_asset_allocation
 
@@ -333,9 +336,9 @@ class PerpMarketMaker(MarketMaker):
 
                     if self.position.direction == "long":
                         reduce_only_quantity = round_down(
-                            self.position.residual_reduce_only_quantity / 2, 4
+                            self.position.residual_reduce_only_quantity / 2, self.min_quantity_tick_size
                         )
-                        if reduce_only_quantity >= 0.0001:
+                        if reduce_only_quantity >= self.min_quantity_tick_size:
                             self.orders["reduce_only_orders"].add(
                                 OrderDerivative(
                                     price=bid_price,
@@ -346,7 +349,7 @@ class PerpMarketMaker(MarketMaker):
                                         market_id=self.market.market_id,
                                         fee_recipient=self.fee_recipient,
                                         subaccount_id=self.subaccount_id,
-                                        price=ask_price - 0.5,
+                                        price=ask_price - self.min_price_tick_size*5,
                                         quantity=reduce_only_quantity,
                                         leverage=self.leverage,
                                         is_buy=False,
@@ -358,9 +361,9 @@ class PerpMarketMaker(MarketMaker):
                     elif self.position.direction == "short":
                         # direction == 'short'
                         reduce_only_quantity = round_down(
-                            self.position.residual_reduce_only_quantity / 2, 4
+                            self.position.residual_reduce_only_quantity / 2, self.min_price_tick_size
                         )
-                        if reduce_only_quantity >= 0.0001:
+                        if reduce_only_quantity >= self.min_quantity_tick_size:
                             self.orders["reduce_only_orders"].add(
                                 OrderDerivative(
                                     price=bid_price,
@@ -579,9 +582,9 @@ class PerpMarketMaker(MarketMaker):
         if (self.position.residual_reduce_only_quantity != 0.0) and (i == 0):
             if self.position.direction == "long":
                 reduce_only_order = OrderDerivative(
-                    price=round(ask_price * 1.01, 4),
+                    price=round(ask_price * 1.01, self.min_price_tick_size),
                     quantity=round_down(
-                        self.position.residual_reduce_only_quantity / 2, 4
+                        self.position.residual_reduce_only_quantity / 2, self.min_quantity_tick_size
                     ),
                     timestamp=ts,
                     side="sell",
@@ -589,10 +592,10 @@ class PerpMarketMaker(MarketMaker):
                         market_id=self.market.market_id,
                         fee_recipient=self.fee_recipient,
                         subaccount_id=self.subaccount_id,
-                        price=round(ask_price * 1.01, 4),
+                        price=round(ask_price * 1.01, self.min_price_tick_size),
                         # FIXME this round_down may cause problem
                         quantity=round_down(
-                            self.position.residual_reduce_only_quantity / 2, 4
+                            self.position.residual_reduce_only_quantity / 2, self.min_quantity_tick_size
                         ),
                         leverage=self.leverage,
                         is_buy=False,
@@ -600,14 +603,12 @@ class PerpMarketMaker(MarketMaker):
                     ),
                 )
                 self.orders["reduce_only_orders"].add(reduce_only_order)
-                logging.info(
-                    f"reduce_only_order {reduce_only_order.msg}"
-                )
+                logging.info(f"reduce_only_order {reduce_only_order.msg}")
             elif self.position.direction == "short":
                 reduce_only_order = OrderDerivative(
-                    price=round(bid_price * 0.99, 4),
+                    price=round(bid_price * 0.99, self.min_price_tick_size),
                     quantity=round_down(
-                        self.position.residual_reduce_only_quantity / 2, 4
+                        self.position.residual_reduce_only_quantity / 2, self.min_quantity_tick_size
                     ),
                     timestamp=ts,
                     side="buy",
@@ -615,10 +616,10 @@ class PerpMarketMaker(MarketMaker):
                         market_id=self.market.market_id,
                         fee_recipient=self.fee_recipient,
                         subaccount_id=self.subaccount_id,
-                        price=round(bid_price * 0.99, 4),
+                        price=round(bid_price * 0.99, self.min_price_tick_size),
                         # FIXME this round_down may cause problem
                         quantity=round_down(
-                            self.position.residual_reduce_only_quantity / 2, 4
+                            self.position.residual_reduce_only_quantity / 2, self.min_quantity_tick_size
                         ),
                         leverage=self.leverage,
                         is_buy=True,
@@ -626,9 +627,7 @@ class PerpMarketMaker(MarketMaker):
                     ),
                 )
                 self.orders["reduce_only_orders"].add(reduce_only_order)
-                logging.info(
-                    f"reduce_only_order {reduce_only_order.msg}"
-                )
+                logging.info(f"reduce_only_order {reduce_only_order.msg}")
 
         ask_order = OrderDerivative(
             price=ask_price,
@@ -640,7 +639,7 @@ class PerpMarketMaker(MarketMaker):
                 fee_recipient=self.fee_recipient,
                 subaccount_id=self.subaccount_id,
                 price=ask_price,
-                quantity=ask_quantity if ask_quantity > 0 else 0.0001,
+                quantity=ask_quantity if ask_quantity > 0 else self.min_quantity_tick_size,
                 leverage=self.leverage,
                 is_buy=False,
             ),
@@ -656,7 +655,7 @@ class PerpMarketMaker(MarketMaker):
                 fee_recipient=self.fee_recipient,
                 subaccount_id=self.subaccount_id,
                 price=bid_price,
-                quantity=bid_quantity if bid_quantity > 0 else 0.0001,
+                quantity=bid_quantity if bid_quantity > 0 else self.min_quantity_tick_size,
                 leverage=self.leverage,
                 is_buy=True,
             ),
@@ -664,12 +663,8 @@ class PerpMarketMaker(MarketMaker):
 
         self.orders["bids"].add(bid_order)
         self.orders["asks"].add(ask_order)
-        logging.debug(
-            f'bid orders: {self.orders["bids"]}'
-        )
-        logging.debug(
-            f'ask orders: {self.orders["asks"]}'
-        )
+        logging.debug(f'bid orders: {self.orders["bids"]}')
+        logging.debug(f'ask orders: {self.orders["asks"]}')
         logging.debug(
             f"bids: {len(self.orders['bids'])} asks: {len(self.orders['asks'])}"
         )
@@ -776,10 +771,10 @@ class PerpMarketMaker(MarketMaker):
                 T=self.T,
             )
 
-        self.ask_price = round(ask_price, 4)
-        self.bid_price = round(bid_price, 4)
+        self.ask_price = round(ask_price, self.min_price_tick_size)
+        self.bid_price = round(bid_price, self.min_price_tick_size)
         # FIXME this price is not correct
-        self.last_trade_price = round((self.bid_price + self.ask_price) / 2, 4)
+        self.last_trade_price = round((self.bid_price + self.ask_price) / 2, self.min_price_tick_size)
 
         msg = self.first_batch()
         logging.debug(f"first batch msg {msg}")
@@ -902,7 +897,6 @@ class PerpMarketMaker(MarketMaker):
                     )
                 logging.info("finished unpacking replace response")
 
-
         # build tx
         gas_price = 500000000
         gas_limit = (
@@ -979,13 +973,13 @@ class PerpMarketMaker(MarketMaker):
                                     trade.trade.position_delta.execution_quantity
                                 )
                                 logging.debug(
-                                    f"ask order quantity: {order.quantity} < 0.0001 {order.quantity<=0.0001}"
+                                    f"ask order quantity: {order.quantity} < min_quantity_tick_size {order.quantity<=self.min_quantity_tick_size}"
                                 )
-                                if order.quantity <= 0.0001:
+                                if order.quantity <= self.min_quantity_tick_size:
                                     if self.replace_event.is_set():
-                                        logging.debug("order quantity <= 0.0001 is set")
+                                        logging.debug("order quantity <= min_quantity_tick_size is set")
                                     else:
-                                        logging.debug("order quantity > 0.0001 is set")
+                                        logging.debug("order quantity > min_quantity_tick_size is set")
                                         self.price_feed.set()
                             else:
                                 logging.debug(
@@ -1007,14 +1001,14 @@ class PerpMarketMaker(MarketMaker):
                                     trade.trade.position_delta.execution_quantity
                                 )
                                 logging.debug(
-                                    f"ask order quantity: {order.quantity} < 0.0001: {order.quantity<=0.0001}"
+                                    f"ask order quantity: {order.quantity} < min_quantity_tick_size: {order.quantity<=self.min_quantity_tick_size}"
                                 )
-                                if order.quantity <= 0.0001:
+                                if order.quantity <= self.min_quantity_tick_size:
                                     if self.replace_event.is_set():
-                                        logging.debug("order quantity <= 0.0001 is set")
+                                        logging.debug("order quantity <= min_quantity_tick_size is set")
                                         pass
                                     else:
-                                        logging.debug("order quantity > 0.0001 is set")
+                                        logging.debug("order quantity > min_quantity_tick_size is set")
                                         self.price_feed.set()
                             else:
                                 logging.debug(
@@ -1191,11 +1185,11 @@ class PerpMarketMaker(MarketMaker):
             if self.last_trade_price and (time() - self.last_trade_ts / 1000):
                 self.ask_price = round(
                     max(self.ask_price, self.oracle_price, self.last_trade_price),
-                    4,
+                    self.min_price_tick_size,
                 )
                 self.bid_price = round(
                     min(self.bid_price, self.oracle_price, self.last_trade_price),
-                    4,
+                    self.min_price_tick_size,
                 )
                 logging.info(
                     "all price feeds are good if: updated bid price: %s, ask price: %s\n",
@@ -1206,11 +1200,11 @@ class PerpMarketMaker(MarketMaker):
             else:
                 self.ask_price = round(
                     max(self.ask_price, self.oracle_price),
-                    4,
+                    self.min_price_tick_size,
                 )
                 self.bid_price = round(
                     min(self.bid_price, self.oracle_price),
-                    4,
+                    self.min_price_tick_size,
                 )
 
                 logging.info(
@@ -1547,7 +1541,7 @@ class PerpMarketMaker(MarketMaker):
                 market_id=self.market.market_id,
                 source_subaccount_id=self.subaccount_id,
                 destination_subaccount_id=self.subaccount_id,
-                amount=round(self.position.margin * 0.15, 4),
+                amount=round(self.position.margin * 0.15, self.min_price_tick_size),
             )
             await self.send_message(msg, skip_unpack_msg=True)
             self.margin_event.clear()
