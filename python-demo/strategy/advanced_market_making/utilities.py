@@ -98,10 +98,10 @@ def restart_program():
     os.execl(python, python, *sys.argv)
 
 
-def round_down(number: float, decimals: int) -> float:
+def round_down(number: float, decimals: int, min_ticker) -> float:
     v = int(number * (10**decimals)) / 10**decimals
-    if v < 0.0001:
-        return 0.0001
+    if v < min_ticker:
+        return min_ticker
     return v
 
 

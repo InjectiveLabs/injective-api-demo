@@ -83,7 +83,9 @@ class PerpMarketMaker(MarketMaker):
         self.bid_price = 0
 
         self.min_price_tick_size = self.market.market_denom.min_price_tick_size
+        self.price_decimal = str(self.min_price_tick_size)[::-1].find(".")
         self.min_quantity_tick_size = self.market.market_denom.min_quantity_tick_size
+        self.quantity_decimal = str(self.min_quantity_tick_size)[::-1].find(".")
 
         self.n_orders = avellaneda_stoikov_configs.getint("n_orders", 5)
         logging.info("n_orders: %s" % self.n_orders)
@@ -224,12 +226,14 @@ class PerpMarketMaker(MarketMaker):
             bid_base = self.bid_price
             ask_base = self.ask_price
 
-        bid_price = round(
+        bid_price = round_down(
             bid_base * (1 - self.price_delta_ratio * i) - random(),
+            self.price_decimal,
             self.min_price_tick_size,
         )
-        ask_price = round(
+        ask_price = round_down(
             ask_base * (1 + self.price_delta_ratio * i) + random(),
+            self.price_decimal,
             self.min_price_tick_size,
         )
         return bid_price, ask_price
@@ -258,7 +262,9 @@ class PerpMarketMaker(MarketMaker):
                     self.balance.available_balance * self.bid_total_asset_allocation,
                 )
             )
-            bid_price = round(self.oracle_price * 0.75, self.min_price_tick_size)
+            bid_price = round_down(
+                self.oracle_price * 0.75, self.price_decimal, self.min_price_tick_size
+            )
             success = False
 
         ask_required_margin = (
@@ -276,7 +282,9 @@ class PerpMarketMaker(MarketMaker):
                     self.balance.available_balance * self.ask_total_asset_allocation,
                 )
             )
-            ask_price = round(self.oracle_price * 1.25, self.min_price_tick_size)
+            ask_price = round_down(
+                self.oracle_price * 1.25, self.price_decimal, self.min_price_tick_size
+            )
             success = False
 
         return success, bid_price, ask_price
@@ -339,6 +347,7 @@ class PerpMarketMaker(MarketMaker):
                     if self.position.direction == "long":
                         reduce_only_quantity = round_down(
                             self.position.residual_reduce_only_quantity / 2,
+                            self.quantity_decimal,
                             self.min_quantity_tick_size,
                         )
                         if reduce_only_quantity >= self.min_quantity_tick_size:
@@ -365,6 +374,7 @@ class PerpMarketMaker(MarketMaker):
                         # direction == 'short'
                         reduce_only_quantity = round_down(
                             self.position.residual_reduce_only_quantity / 2,
+                            self.quantity_decimal,
                             self.min_price_tick_size,
                         )
                         if reduce_only_quantity >= self.min_quantity_tick_size:
@@ -586,9 +596,12 @@ class PerpMarketMaker(MarketMaker):
         if (self.position.residual_reduce_only_quantity != 0.0) and (i == 0):
             if self.position.direction == "long":
                 reduce_only_order = OrderDerivative(
-                    price=round(ask_price * 1.01, self.min_price_tick_size),
+                    price=round_down(
+                        ask_price * 1.01, self.price_decimal, self.min_price_tick_size
+                    ),
                     quantity=round_down(
                         self.position.residual_reduce_only_quantity / 2,
+                        self.quantity_decimal,
                         self.min_quantity_tick_size,
                     ),
                     timestamp=ts,
@@ -597,10 +610,15 @@ class PerpMarketMaker(MarketMaker):
                         market_id=self.market.market_id,
                         fee_recipient=self.fee_recipient,
                         subaccount_id=self.subaccount_id,
-                        price=round(ask_price * 1.01, self.min_price_tick_size),
+                        price=round_down(
+                            ask_price * 1.01,
+                            self.price_decimal,
+                            self.min_price_tick_size,
+                        ),
                         # FIXME this round_down may cause problem
                         quantity=round_down(
                             self.position.residual_reduce_only_quantity / 2,
+                            self.quantity_decimal,
                             self.min_quantity_tick_size,
                         ),
                         leverage=self.leverage,
@@ -612,9 +630,12 @@ class PerpMarketMaker(MarketMaker):
                 logging.info(f"reduce_only_order {reduce_only_order.msg}")
             elif self.position.direction == "short":
                 reduce_only_order = OrderDerivative(
-                    price=round(bid_price * 0.99, self.min_price_tick_size),
+                    price=round_down(
+                        bid_price * 0.99, self.price_decimal, self.min_price_tick_size
+                    ),
                     quantity=round_down(
                         self.position.residual_reduce_only_quantity / 2,
+                        self.quantity_decimal,
                         self.min_quantity_tick_size,
                     ),
                     timestamp=ts,
@@ -623,10 +644,15 @@ class PerpMarketMaker(MarketMaker):
                         market_id=self.market.market_id,
                         fee_recipient=self.fee_recipient,
                         subaccount_id=self.subaccount_id,
-                        price=round(bid_price * 0.99, self.min_price_tick_size),
+                        price=round_down(
+                            bid_price * 0.99,
+                            self.price_decimal,
+                            self.min_price_tick_size,
+                        ),
                         # FIXME this round_down may cause problem
                         quantity=round_down(
                             self.position.residual_reduce_only_quantity / 2,
+                            self.quantity_decimal,
                             self.min_quantity_tick_size,
                         ),
                         leverage=self.leverage,
@@ -783,11 +809,17 @@ class PerpMarketMaker(MarketMaker):
                 T=self.T,
             )
 
-        self.ask_price = round(ask_price, self.min_price_tick_size)
-        self.bid_price = round(bid_price, self.min_price_tick_size)
+        self.ask_price = round_down(
+            ask_price, self.price_decimal, self.min_price_tick_size
+        )
+        self.bid_price = round_down(
+            bid_price, self.price_decimal, self.min_price_tick_size
+        )
         # FIXME this price is not correct
-        self.last_trade_price = round(
-            (self.bid_price + self.ask_price) / 2, self.min_price_tick_size
+        self.last_trade_price = round_down(
+            (self.bid_price + self.ask_price) / 2,
+            self.price_decimal,
+            self.min_price_tick_size,
         )
 
         msg = self.first_batch()
@@ -1210,12 +1242,14 @@ class PerpMarketMaker(MarketMaker):
                 T=self.T,
             )
             if self.last_trade_price and (time() - self.last_trade_ts / 1000):
-                self.ask_price = round(
+                self.ask_price = round_down(
                     max(self.ask_price, self.oracle_price, self.last_trade_price),
+                    self.price_decimal,
                     self.min_price_tick_size,
                 )
-                self.bid_price = round(
+                self.bid_price = round_down(
                     min(self.bid_price, self.oracle_price, self.last_trade_price),
+                    self.price_decimal,
                     self.min_price_tick_size,
                 )
                 logging.info(
@@ -1225,12 +1259,14 @@ class PerpMarketMaker(MarketMaker):
                 )
 
             else:
-                self.ask_price = round(
+                self.ask_price = round_down(
                     max(self.ask_price, self.oracle_price),
+                    self.price_decimal,
                     self.min_price_tick_size,
                 )
-                self.bid_price = round(
+                self.bid_price = round_down(
                     min(self.bid_price, self.oracle_price),
+                    self.price_decimal,
                     self.min_price_tick_size,
                 )
 
@@ -1568,7 +1604,11 @@ class PerpMarketMaker(MarketMaker):
                 market_id=self.market.market_id,
                 source_subaccount_id=self.subaccount_id,
                 destination_subaccount_id=self.subaccount_id,
-                amount=round(self.position.margin * 0.15, self.min_price_tick_size),
+                amount=round_down(
+                    self.position.margin * 0.15,
+                    self.price_decimal,
+                    self.min_price_tick_size,
+                ),
             )
             await self.send_message(msg, skip_unpack_msg=True)
             self.margin_event.clear()
