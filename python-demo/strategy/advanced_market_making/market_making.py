@@ -218,7 +218,7 @@ class PerpMarketMaker(MarketMaker):
         )
         return bid_asset_delta, ask_asset_delta
 
-    def _compute_prices(self, i: int):
+    def _compute_prices(self, i: int) -> Tuple[float, float]:
 
         bid_base = self.bid_price
         ask_base = self.ask_price
@@ -227,12 +227,14 @@ class PerpMarketMaker(MarketMaker):
             ask_base = self.ask_price
 
         bid_price = round_down(
-            bid_base * (1 - self.price_delta_ratio * i) - random(),
+            bid_base * (1 - self.price_delta_ratio * i)
+            - random() * 10 * self.price_decimal,
             self.price_decimal,
             self.min_price_tick_size,
         )
         ask_price = round_down(
-            ask_base * (1 + self.price_delta_ratio * i) + random(),
+            ask_base * (1 + self.price_delta_ratio * i)
+            + random() * 10 * self.price_decimal,
             self.price_decimal,
             self.min_price_tick_size,
         )
@@ -244,7 +246,7 @@ class PerpMarketMaker(MarketMaker):
         ask_price: float,
         bid_quantity: float,
         ask_quantity: float,
-    ):
+    ) -> Tuple[bool, float, float]:
         success = True
 
         bid_required_margin = (
@@ -308,8 +310,12 @@ class PerpMarketMaker(MarketMaker):
         asset_allocation = self._compute_asset_allocation(i)
         logging.debug(f"asset_allocation: {asset_allocation}")
 
-        bid_quantity = truncate_float(asset_allocation[0] / bid_price, 4)
-        ask_quantity = truncate_float(asset_allocation[1] / ask_price, 4)
+        bid_quantity = truncate_float(
+            asset_allocation[0] / bid_price, self.quantity_decimal
+        )
+        ask_quantity = truncate_float(
+            asset_allocation[1] / ask_price, self.quantity_decimal
+        )
         logging.debug(
             f"batch {i}, bid_price: {bid_price:.2f}, ask_price: {ask_price:.2f}, bid_asset_allocation: {asset_allocation[0]:.5f}, ask_asset_allocation: {asset_allocation[1]:.5f}, bid_quantity: {bid_quantity:.4f}, ask_quantity: {ask_quantity:.4f}"
         )

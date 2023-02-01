@@ -37,7 +37,7 @@ def avellaneda_stoikov_model(
 
         # Optimal quotes
         coef = (
-            gamma**2 * sigma**2 / (2 * w - gamma**2 * quantity**2 * sigma**2)
+            gamma**2 * sigma**2 / (2 * w - gamma**2 * sigma**2 * quantity**2)
         )
 
         reservation_price_ask = mid_price + log(1 + (1 - 2 * quantity) * coef) / gamma

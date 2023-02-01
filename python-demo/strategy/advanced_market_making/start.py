@@ -48,7 +48,8 @@ if __name__ == "__main__":
 
     try:
         loop.create_task(
-            perp_market_maker.market_making_strategy(), name="market_making_strategy"
+            perp_market_maker.market_making_strategy(),
+            name="advanced_market_making_strategy",
         )
         loop.run_forever()
     finally:
