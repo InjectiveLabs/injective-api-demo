@@ -10,10 +10,11 @@ from asyncio import (
 import logging
 from pyinjective.transaction import Transaction
 from pyinjective.wallet import PrivateKey
-from pyinjective.utils import derivative_price_from_backend
+
+# from pyinjective.utils import derivative_price_from_backend
 
 from sortedcontainers import SortedList
-from objs import (
+from core.object import (
     PositionDerivative,
     MarketDerivative,
     OrderDerivative,
@@ -22,8 +23,8 @@ from objs import (
 from configparser import SectionProxy
 from math import log
 from random import random
-from typing import List, Dict, Tuple
-from utilities import (
+from typing import List, Dict, Tuple, Any
+from util.misc import (
     build_client_and_composer,
     switch_network,
     round_down,
@@ -32,6 +33,7 @@ from utilities import (
 )
 from avellaneda_stoikov import avellaneda_stoikov_model
 from market_making_template import MarketMaker
+from grpc import RpcError
 
 
 class PerpMarketMaker(MarketMaker):
@@ -82,9 +84,11 @@ class PerpMarketMaker(MarketMaker):
         self.ask_price = 0
         self.bid_price = 0
 
-        self.min_price_tick_size = self.market.market_denom.min_price_tick_size
+        self.min_price_tick_size = int(self.market.market_denom.min_price_tick_size)
         self.price_decimal = str(self.min_price_tick_size)[::-1].find(".")
-        self.min_quantity_tick_size = self.market.market_denom.min_quantity_tick_size
+        self.min_quantity_tick_size = int(
+            self.market.market_denom.min_quantity_tick_size
+        )
         self.quantity_decimal = str(self.min_quantity_tick_size)[::-1].find(".")
 
         self.n_orders = avellaneda_stoikov_configs.getint("n_orders", 5)
@@ -679,9 +683,9 @@ class PerpMarketMaker(MarketMaker):
                 fee_recipient=self.fee_recipient,
                 subaccount_id=self.subaccount_id,
                 price=ask_price,
-                quantity=ask_quantity
-                if ask_quantity > 0
-                else self.min_quantity_tick_size,
+                quantity=(
+                    ask_quantity if ask_quantity > 0 else self.min_quantity_tick_size
+                ),
                 leverage=self.leverage,
                 is_buy=False,
             ),
@@ -697,9 +701,9 @@ class PerpMarketMaker(MarketMaker):
                 fee_recipient=self.fee_recipient,
                 subaccount_id=self.subaccount_id,
                 price=bid_price,
-                quantity=bid_quantity
-                if bid_quantity > 0
-                else self.min_quantity_tick_size,
+                quantity=(
+                    bid_quantity if bid_quantity > 0 else self.min_quantity_tick_size
+                ),
                 leverage=self.leverage,
                 is_buy=True,
             ),
@@ -887,16 +891,17 @@ class PerpMarketMaker(MarketMaker):
         sim_tx_raw_bytes = tx.get_tx_data(sim_sig, self.pub_key)
 
         # simulate tx
-        (sim_res, success) = await self.client.simulate_tx(sim_tx_raw_bytes)
-        logging.debug("success: %s sim_res %s" % (success, sim_res))
-
-        if not success:
-            logging.info(f"success: {success}")
-            logging.info(f"failed in simulate {sim_res}")
+        try:
+            sim_res = await self.client.simulate(sim_tx_raw_bytes)
+            logging.debug("success: sim_res %s" % (sim_res))
+        except RpcError as ex:
+            logging.error(ex)
             self.address.init_num_seq(self.network.lcd_endpoint)
-            raise Exception(f"failed in simulate {sim_res}")
+            return
 
-        sim_res_msg = self.composer.MsgResponses(sim_res.result.data, simulation=True)
+        sim_res_msg = self.composer.MsgResponses(
+            sim_res["result"].data, simulation=True
+        )
         logging.debug(f"simulation {sim_res_msg}")
 
         if not skip_unpack_msg:
@@ -921,9 +926,9 @@ class PerpMarketMaker(MarketMaker):
                     logging.info(
                         f"new only: ask order to place, price: {order.price:6.2f}, quantity: {order.quantity:6.4f}, hash: {order.order_hash}"
                     )
-                if len(self.orders["reduce_only_orders"]) > 0:
+                for order in self.orders["reduce_only_orders"]:
                     logging.info(
-                        f"new only: reduce only order to place, price: {self.orders['reduce_only_orders'][-1].price:6.2f}, quantity: {self.orders['reduce_only_orders'][-1].quantity:6.4f}, hash: {self.orders['reduce_only_orders'][-1].order_hash}"
+                        f"new only: reduce only order to place, price: {order.price:6.2f}, quantity: {order.quantity:6.4f}, hash: {order.order_hash}"
                     )
 
                 logging.info("finished unpacking new only response")
@@ -957,7 +962,7 @@ class PerpMarketMaker(MarketMaker):
         # build tx
         gas_price = 500000000
         gas_limit = (
-            sim_res.gas_info.gas_used + 20000
+            sim_res["gas_info"].gas_used + 20000
         )  # add 20k for gas, fee computation
         fee = [
             self.composer.Coin(
@@ -986,115 +991,145 @@ class PerpMarketMaker(MarketMaker):
         return res_msg
 
     async def balance_stream(self):
-
-        subaccount = await self.client.stream_subaccount_balance(self.subaccount_id)
-        async for balance in subaccount:
-            # print("Subaccount balance Update:\n")
-
+        async def balance_event_processor(event: Dict[str, Any]):
+            # print(event)
             self.balance.update_balance(
-                available_balance=(
-                    float(balance.balance.deposit.available_balance) / 1e18
-                ),
-                total_balance=(float(balance.balance.deposit.total_balance) / 1e18),
+                available_balance=(float(event["deposit"]["available_balance"]) / 1e18),
+                total_balance=(float(event["deposit"]["total_balance"]) / 1e18),
             )
-            # print(balance)
+
+        def stream_error_processor(exception: RpcError):
+            logging.error(
+                f"There was an error listening to balance updates ({exception})"
+            )
+
+        def stream_closed_processor():
+            logging.info("The balance updates stream has been closed")
+
+        subaccounts = await self.client.fetch_subaccounts_list(self.subaccount_id)
+
+        subaccount_id = subaccounts["subaccounts"][0]
+        subaccount_id[-1] = "0"
+        await self.client.listen_subaccount_balance_updates(
+            subaccount_id=subaccount_id,
+            callback=balance_event_processor,
+            on_end_callback=stream_closed_processor,
+            on_status_callback=stream_error_processor,
+            # denoms=denoms,
+        )
+
+        # async for balance in subaccount:
+        #     # print("Subaccount balance Update:\n")
+
+        #     self.balance.update_balance(
+        #         available_balance=(
+        #             float(balance.balance.deposit.available_balance) / 1e18
+        #         ),
+        #         total_balance=(float(balance.balance.deposit.total_balance) / 1e18),
+        #     )
+        # print(balance)
 
     async def trade_stream(self):
-        # TODO: figure out which order get filled
+
+        async def trade_event_processor(event: Dict[str, Any]):
+            logging.debug(f"new trade")
+            logging.debug(f'bids: {self.orders["bids"]}')
+            logging.debug(f'asks: {self.orders["asks"]}')
+            trade = event["trade"]
+            if self.last_trade_ts == trade["executed_at"]:
+                logging.debug(f" duplicate trade")
+            else:
+                self.last_trade_ts = trade["executed_at"]
+                self.last_trade_price = derivative_price_from_backend(
+                    trade["execution_price"],
+                    self.market.market_denom,
+                )
+
+                # TODO check quantity
+                if trade["trade_direction"] == "buy":
+                    for order in self.orders["bids"]:
+                        if order.order_hash == trade["order_hash"]:
+                            order.quantity -= float(trade["execution_quantity"])
+                            logging.debug(
+                                f"ask order quantity: {order.quantity} < min_quantity_tick_size {order.quantity<=self.min_quantity_tick_size}"
+                            )
+                            if order.quantity <= self.min_quantity_tick_size:
+                                if self.replace_event.is_set():
+                                    logging.debug(
+                                        "order quantity <= min_quantity_tick_size is set"
+                                    )
+                                else:
+                                    logging.debug(
+                                        "order quantity > min_quantity_tick_size is set"
+                                    )
+                                    self.price_feed.set()
+                        else:
+                            logging.debug(
+                                f"buy  price feed is set: {self.price_feed.is_set()}"
+                            )
+                            if self.price_feed.is_set():
+                                logging.debug("price feed is set")
+                            else:
+                                logging.debug("price feed is not set")
+                                self.price_feed.set()
+                            logging.debug(f"updated buy orders")
+
+                    # self.orders["bids"].remove(order)
+                    # refill orders
+                elif trade["trade_direction"] == "sell":
+                    for order in self.orders["asks"]:
+                        if order.order_hash == trade["order_hash"]:
+                            order.quantity -= float(trade["execution_quantity"])
+                            logging.debug(
+                                f"ask order quantity: {order.quantity} < min_quantity_tick_size: {order.quantity<=self.min_quantity_tick_size}"
+                            )
+                            if order.quantity <= self.min_quantity_tick_size:
+                                if self.replace_event.is_set():
+                                    logging.debug(
+                                        "order quantity <= min_quantity_tick_size is set"
+                                    )
+                                    pass
+                                else:
+                                    logging.debug(
+                                        "order quantity > min_quantity_tick_size is set"
+                                    )
+                                    self.price_feed.set()
+                        else:
+                            logging.debug(
+                                f"sell price feed is set: {self.price_feed.is_set()}"
+                            )
+                            if self.price_feed.is_set():
+                                logging.debug("price feed is set")
+                            else:
+                                logging.debug("price feed is not set")
+                                self.price_feed.set()
+                            logging.debug(f"updated sell orders")
+                else:
+                    logging.error(
+                        f"unknown trade direction: {trade['trade_direction']}"
+                    )
+                    if self.replace_event.is_set():
+                        pass
+                    else:
+                        self.price_feed.set()
+                        logging.error(f"price feed event set")
+
+        def stream_error_processor(exception: RpcError):
+            print(f"There was an error listening to spot trades updates ({exception})")
+
+        def stream_closed_processor():
+            print("The spot trades updates stream has been closed")
 
         # self.last_trade_price = round(self.bid_price + self.ask_price / 2, 2)
         while True:
             logging.info(f"start trade stream, {self.subaccount_id}")
-            trades = await self.client.stream_derivative_trades(
-                market_id=self.market.market_id, subaccount_id=self.subaccount_id
+            trades = await self.client.listen_spot_trades_updates(
+                callback=trade_event_processor,
+                on_end_callback=stream_closed_processor,
+                on_status_callback=stream_error_processor,
+                market_ids=[self.market.market_id],
+                subaccount_ids=[self.subaccount_id],
             )
-
-            async for trade in trades:
-                logging.debug(f"new trade")
-                logging.debug(f'bids: {self.orders["bids"]}')
-                logging.debug(f'asks: {self.orders["asks"]}')
-                if self.last_trade_ts == trade.trade.executed_at:
-                    logging.debug(f" duplicate trade")
-                else:
-                    self.last_trade_ts = trade.trade.executed_at
-                    self.last_trade_price = derivative_price_from_backend(
-                        trade.trade.position_delta.execution_price,
-                        self.market.market_denom,
-                    )
-
-                    # TODO check quantity
-                    if trade.trade.position_delta.trade_direction == "buy":
-                        for order in self.orders["bids"]:
-                            if order.order_hash == trade.trade.order_hash:
-                                order.quantity -= float(
-                                    trade.trade.position_delta.execution_quantity
-                                )
-                                logging.debug(
-                                    f"ask order quantity: {order.quantity} < min_quantity_tick_size {order.quantity<=self.min_quantity_tick_size}"
-                                )
-                                if order.quantity <= self.min_quantity_tick_size:
-                                    if self.replace_event.is_set():
-                                        logging.debug(
-                                            "order quantity <= min_quantity_tick_size is set"
-                                        )
-                                    else:
-                                        logging.debug(
-                                            "order quantity > min_quantity_tick_size is set"
-                                        )
-                                        self.price_feed.set()
-                            else:
-                                logging.debug(
-                                    f"buy  price feed is set: {self.price_feed.is_set()}"
-                                )
-                                if self.price_feed.is_set():
-                                    logging.debug("price feed is set")
-                                else:
-                                    logging.debug("price feed is not set")
-                                    self.price_feed.set()
-                                logging.debug(f"updated buy orders")
-
-                        # self.orders["bids"].remove(order)
-                        # refill orders
-                    elif trade.trade.position_delta.trade_direction == "sell":
-                        for order in self.orders["asks"]:
-                            if order.order_hash == trade.trade.order_hash:
-                                order.quantity -= float(
-                                    trade.trade.position_delta.execution_quantity
-                                )
-                                logging.debug(
-                                    f"ask order quantity: {order.quantity} < min_quantity_tick_size: {order.quantity<=self.min_quantity_tick_size}"
-                                )
-                                if order.quantity <= self.min_quantity_tick_size:
-                                    if self.replace_event.is_set():
-                                        logging.debug(
-                                            "order quantity <= min_quantity_tick_size is set"
-                                        )
-                                        pass
-                                    else:
-                                        logging.debug(
-                                            "order quantity > min_quantity_tick_size is set"
-                                        )
-                                        self.price_feed.set()
-                            else:
-                                logging.debug(
-                                    f"sell price feed is set: {self.price_feed.is_set()}"
-                                )
-                                if self.price_feed.is_set():
-                                    logging.debug("price feed is set")
-                                else:
-                                    logging.debug("price feed is not set")
-                                    self.price_feed.set()
-                                logging.debug(f"updated sell orders")
-                    else:
-                        logging.error(
-                            f"unknown trade direction: {trade.trade.position_delta.trade_direction}"
-                        )
-                        if self.replace_event.is_set():
-                            pass
-                        else:
-                            self.price_feed.set()
-                            logging.error(f"price feed event set")
-                        # self.trade_event.set()
 
     async def get_prices_cycle(self):
         while True:
@@ -1114,36 +1149,46 @@ class PerpMarketMaker(MarketMaker):
             pass
 
     async def orderbook_stream(self):
+        async def orderbook_event_processor(event: Dict[str, Any]):
+            # print(event)
+            orderbook = event["orderbook"]
+            buys = orderbook["buys"]
+            asks = orderbook["asks"]
+            if len(buys) >= 1:
+                self.tob_bid_price = buys[0]["price"]
+            if len(buys) >= 2:
+                self.sob_best_bid_price = buys[1]["price"]
+
+            if len(asks) >= 1:
+                self.tob_ask_price = asks[0]["price"]
+            if len(asks) >= 2:
+                self.sob_best_ask_price = asks[1]["price"]
+
+            logging.debug(
+                "second_best_bid_price: %s best bid price: %s, best ask price: %s, second_hest ask price %s",
+                self.sob_best_bid_price,
+                self.tob_bid_price,
+                self.tob_ask_price,
+                self.sob_best_ask_price,
+            )
+
+        def stream_error_processor(exception: RpcError):
+            print(
+                f"There was an error listening to derivative orderbook snapshots ({exception})"
+            )
+
+        def stream_closed_processor():
+            print("The derivative orderbook snapshots stream has been closed")
+
         while True:
             logging.info("start orderbook stream")
-            orderbooks = await self.client.stream_derivative_orderbook(
-                market_id=self.market.market_id
+            orderbooks = await self.client.listen_derivative_orderbook_snapshots(
+                market_ids=[self.market.market_id],
+                callback=orderbook_event_processor,
+                on_end_callback=stream_closed_processor,
+                on_status_callback=stream_error_processor,
             )
-            async for orderbook in orderbooks:
-                if len(orderbook.orderbook.buys) >= 1:
-                    self.tob_bid_price = derivative_price_from_backend(
-                        orderbook.orderbook.buys[0].price, self.market.market_denom
-                    )
-                if len(orderbook.orderbook.sells) >= 1:
-                    self.tob_ask_price = derivative_price_from_backend(
-                        orderbook.orderbook.sells[0].price, self.market.market_denom
-                    )
-                if len(orderbook.orderbook.buys) >= 2:
-                    self.sob_best_bid_price = derivative_price_from_backend(
-                        orderbook.orderbook.buys[1].price, self.market.market_denom
-                    )
-                if len(orderbook.orderbook.sells) >= 2:
-                    self.sob_best_ask_price = derivative_price_from_backend(
-                        orderbook.orderbook.sells[1].price, self.market.market_denom
-                    )
-                logging.debug(
-                    "second_best_bid_price: %s best bid price: %s, best ask price: %s, second_hest ask price %s",
-                    self.sob_best_bid_price,
-                    self.tob_bid_price,
-                    self.tob_ask_price,
-                    self.sob_best_ask_price,
-                )
-                # TODO replace orders
+            # TODO replace orders
 
     async def orders_stream(self):
         # TODO this is not needed
@@ -1369,11 +1414,11 @@ class PerpMarketMaker(MarketMaker):
                     self.price_feed.set()
 
     async def onetime_orderbook(self):
-        orderbook = await self.client.get_derivative_orderbook(
-            market_id=self.market.market_id
+        orderbook = await self.client.fetch_derivative_orderbooks_v2(
+            market_ids=[self.market.market_id]
         )
-        bids = orderbook.orderbook.buys
-        asks = orderbook.orderbook.sells
+        bids = orderbook["orderbook"]["buys"]
+        asks = orderbook["orderbook"]["sells"]
 
         self.tob_bid_price = derivative_price_from_backend(
             float(bids[0].price), self.market.market_denom

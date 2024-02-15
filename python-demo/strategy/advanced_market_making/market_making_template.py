@@ -5,14 +5,14 @@ import logging
 from pyinjective.wallet import PrivateKey
 
 from sortedcontainers import SortedList
-from objs import (
+from core.object import (
     PositionDerivative,
     MarketDerivative,
     BalanceDerivative,
 )
 from configparser import SectionProxy
 from typing import List, Dict
-from utilities import (
+from util.misc import (
     build_client_and_composer,
     switch_network,
 )
