@@ -32,7 +32,7 @@ from util.misc import (
     _handle_task_result,
 )
 from avellaneda_stoikov import avellaneda_stoikov_model
-from market_making_template import MarketMaker
+from core.templates.market_making_template import MarketMaker
 from grpc import RpcError
 
 

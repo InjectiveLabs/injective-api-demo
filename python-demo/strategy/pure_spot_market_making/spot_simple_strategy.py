@@ -1,4 +1,4 @@
-from spot_template import SpotTemplate
+from core.templates.spot_template import SpotTemplate
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio

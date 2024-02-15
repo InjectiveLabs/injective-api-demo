@@ -23,5 +23,4 @@ if __name__ == "__main__":
         mean_reversion_demo = SmaSpotStrategy(configs=configs["mean_reversion"])
         mean_reversion_demo.start()
     except Exception as e:
-        traceback.extract_tb(e)
-
+        traceback.format_exception_only(type(e), e)

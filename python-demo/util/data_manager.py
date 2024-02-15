@@ -1,4 +1,4 @@
-from abc import (ABC, abstractmethod)
+from abc import ABC, abstractmethod
 from collections import deque
 
 import numpy as np
@@ -10,6 +10,7 @@ class DataManager(ABC):
 
     used to manipulate data and generate signals
     """
+
     def __init__(self, n_win, n_std, **kwargs):
         """
 
@@ -22,15 +23,15 @@ class DataManager(ABC):
         self.n_std = n_std
 
         self.container = dict()
-        self.container['BestBid'] = deque([0], maxlen=self.n_win)
-        self.container['BestAsk'] = deque([0], maxlen=self.n_win)
-        self.container['BestBidQuantity'] = deque([0], maxlen=self.n_win)
-        self.container['BestAskQuantity'] = deque([0], maxlen=self.n_win)
-        self.container['MidPrice'] = deque([0], maxlen=self.n_win)
-        self.container['AVG'] = deque([0], maxlen=self.n_win)
-        self.container['STD'] = deque([0], maxlen=self.n_win)
-        self.container['Upper'] = deque([0], maxlen=self.n_win)
-        self.container['Lower'] = deque([0], maxlen=self.n_win)
+        self.container["BestBid"] = deque([0], maxlen=self.n_win)
+        self.container["BestAsk"] = deque([0], maxlen=self.n_win)
+        self.container["BestBidQuantity"] = deque([0], maxlen=self.n_win)
+        self.container["BestAskQuantity"] = deque([0], maxlen=self.n_win)
+        self.container["MidPrice"] = deque([0], maxlen=self.n_win)
+        self.container["AVG"] = deque([0], maxlen=self.n_win)
+        self.container["STD"] = deque([0], maxlen=self.n_win)
+        self.container["Upper"] = deque([0], maxlen=self.n_win)
+        self.container["Lower"] = deque([0], maxlen=self.n_win)
 
     @abstractmethod
     def update(self):
@@ -42,7 +43,7 @@ class DataManager(ABC):
 
 
 class SmaDataManager(DataManager):
-    def __init__(self, n_window=20, n_std=2, **kwargs):
+    def __init__(self, n_window=20, n_std=2.0, **kwargs):
         super().__init__(n_win=n_window, n_std=n_std, **kwargs)
 
     def _add(self, best_bid, best_ask, best_bid_quantity, best_ask_quantity):
@@ -61,19 +62,19 @@ class SmaDataManager(DataManager):
         # calculate mid price
         mid_price = (best_bid + best_ask) / 2
         # add top of orderbook and quantity to the data container
-        self.container['BestBid'].append(best_bid)
-        self.container['BestAsk'].append(best_ask)
-        self.container['BestBidQuantity'].append(best_bid_quantity)
-        self.container['BestAskQuantity'].append(best_ask_quantity)
-        self.container['MidPrice'].append(mid_price)
+        self.container["BestBid"].append(best_bid)
+        self.container["BestAsk"].append(best_ask)
+        self.container["BestBidQuantity"].append(best_bid_quantity)
+        self.container["BestAskQuantity"].append(best_ask_quantity)
+        self.container["MidPrice"].append(mid_price)
 
         # calculate the moving average and moving standard deviation
-        self.container['AVG'].append(self.container['AVG'][-1] + mid_price / self.n_win)
-        self.container['STD'].append(0)
+        self.container["AVG"].append(self.container["AVG"][-1] + mid_price / self.n_win)
+        self.container["STD"].append(0)
 
         # calculate the upper band and the lower band
-        self.container['Upper'].append(0)
-        self.container['Lower'].append(0)
+        self.container["Upper"].append(0)
+        self.container["Lower"].append(0)
 
     def _replace(self, best_bid, best_ask, best_bid_quantity, best_ask_quantity):
         """
@@ -91,21 +92,24 @@ class SmaDataManager(DataManager):
         mid_price = (best_bid + best_ask) / 2
 
         # add top of orderbook and quantity to the data container
-        self.container['BestBid'].append(best_bid)
-        self.container['BestAsk'].append(best_ask)
-        self.container['BestBidQuantity'].append(best_bid_quantity)
-        self.container['BestAskQuantity'].append(best_ask_quantity)
+        self.container["BestBid"].append(best_bid)
+        self.container["BestAsk"].append(best_ask)
+        self.container["BestBidQuantity"].append(best_bid_quantity)
+        self.container["BestAskQuantity"].append(best_ask_quantity)
 
         # calculate the moving average and moving standard deviation
-        self.container['AVG'].append(self.container['AVG'][-1] - (self.container['MidPrice'][0] / self.n_win) +
-                                     (mid_price / self.n_win))
-        self.container['MidPrice'].append(mid_price)
+        self.container["AVG"].append(
+            self.container["AVG"][-1]
+            - (self.container["MidPrice"][0] / self.n_win)
+            + (mid_price / self.n_win)
+        )
+        self.container["MidPrice"].append(mid_price)
         std = np.std(self.container["MidPrice"])
 
         # calculate the upper band and the lower band
-        self.container['STD'].append(std)
-        self.container['Upper'].append(mid_price + self.n_std * std)
-        self.container['Lower'].append(mid_price - self.n_std * std)
+        self.container["STD"].append(std)
+        self.container["Upper"].append(mid_price + self.n_std * std)
+        self.container["Lower"].append(mid_price - self.n_std * std)
 
     def update(self, best_bid, best_ask, best_bid_quantity, best_ask_quantity):
         """
@@ -120,7 +124,7 @@ class SmaDataManager(DataManager):
         Returns:
 
         """
-        if self.container['MidPrice'][0]:
+        if self.container["MidPrice"][0]:
             self._replace(best_bid, best_ask, best_bid_quantity, best_ask_quantity)
             return True
         else:
@@ -137,17 +141,25 @@ class SmaDataManager(DataManager):
             0  ==> hold
 
         """
-        if self.container["AVG"][-2] < self.container['MidPrice'][-2] < self.container['Upper'][-2]:
-            if self.container['MidPrice'][-1] > self.container['Upper'][-1]:
+        if (
+            self.container["AVG"][-2]
+            < self.container["MidPrice"][-2]
+            < self.container["Upper"][-2]
+        ):
+            if self.container["MidPrice"][-1] > self.container["Upper"][-1]:
                 return -1
-            elif self.container['MidPrice'][-1] < self.container['AVG'][-1]:
+            elif self.container["MidPrice"][-1] < self.container["AVG"][-1]:
                 return 1
             else:
                 return 0
-        if self.container["AVG"][-2] > self.container['MidPrice'][-2] > self.container['Lower'][-2]:
-            if self.container['MidPrice'][-1] < self.container['Lower'][-1]:
+        if (
+            self.container["AVG"][-2]
+            > self.container["MidPrice"][-2]
+            > self.container["Lower"][-2]
+        ):
+            if self.container["MidPrice"][-1] < self.container["Lower"][-1]:
                 return 1
-            elif self.container['MidPrice'][-1] > self.container["AVG"][-1]:
+            elif self.container["MidPrice"][-1] > self.container["AVG"][-1]:
                 return -1
             else:
                 return 0
@@ -158,15 +170,13 @@ class SmaDataManager(DataManager):
 class EmaDataManager(DataManager):
     def __init__(self, n_window=20, maxlen=100, **kwargs):
         super().__init__(n_win=n_window, maxlen=maxlen, **kwargs)
-        self.smoothing = kwargs.get('smoothing', 3)
-        self.smoothing_adj = self.smoothing/(1 + self.n_win)
+        self.smoothing = kwargs.get("smoothing", 3)
+        self.smoothing_adj = self.smoothing / (1 + self.n_win)
         self.smoothing_adj_1 = 1 - self.smoothing_adj
 
 
 class EwmaDataManager(DataManager):
     def __init__(self, n_window=20, maxlen=100, **kwargs):
         super().__init__(n_win=20, maxlen=100, **kwargs)
-        self.alpha = kwargs.get('alpha', 0.4)
+        self.alpha = kwargs.get("alpha", 0.4)
         self.alpha_1 = 1 - self.alpha
-
-

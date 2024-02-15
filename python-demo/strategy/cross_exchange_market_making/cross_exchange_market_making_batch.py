@@ -14,7 +14,7 @@ from aiohttp import TCPConnector, ClientSession
 
 
 from pyinjective.async_client import AsyncClient
-from pyinjective.constant import Network
+from pyinjective.core.network import Network
 from pyinjective.composer import Composer
 from pyinjective.transaction import Transaction
 from pyinjective.wallet import PrivateKey
@@ -55,7 +55,7 @@ class InjectiveSpotStrategy(Strategy):
         quote: str,
         config: ConfigParser,
         network: Network,
-        insecure:bool,
+        insecure: bool,
         fee_recipient: str,
         private_key: str,
         min_base_balance: float = 10,
@@ -149,7 +149,7 @@ class InjectiveSpotStrategy(Strategy):
         )
         self._base_balance = float(
             Decimal(balance.balance.deposit.available_balance)
-            / 10 ** self._base_asset_multiplier
+            / 10**self._base_asset_multiplier
         )
 
     async def get_quote_asset_balance(self):
@@ -159,7 +159,7 @@ class InjectiveSpotStrategy(Strategy):
         )
         self._quote_balance = float(
             Decimal(balance.balance.deposit.available_balance)
-            / 10 ** self._quote_asset_multiplier
+            / 10**self._quote_asset_multiplier
         )
 
     async def place_and_replace_orders(self):
@@ -401,7 +401,6 @@ class InjectiveSpotStrategy(Strategy):
             sender=self._address.to_acc_bech32(), data=cancel_orders
         )
 
-
         # prepare tx msg
         create_msg = self._composer.MsgCreateSpotLimitOrder(
             sender=self._address.to_acc_bech32(),
@@ -626,7 +625,9 @@ class InjectiveSpotStrategy(Strategy):
             return (res_msg, sim_res_msg)
         return (res_msg, None)
 
-    async def _batch_replace_spot_limit_orders(self, orders_list: List[Tuple[float, float, bool]], simulation: bool = True):
+    async def _batch_replace_spot_limit_orders(
+        self, orders_list: List[Tuple[float, float, bool]], simulation: bool = True
+    ):
         cancel_orders = []
         cancel_orders_detail = []
         while not self._orders.empty():
@@ -644,8 +645,6 @@ class InjectiveSpotStrategy(Strategy):
         cancel_msg = self._composer.MsgBatchCancelSpotOrders(
             sender=self._address.to_acc_bech32(), data=cancel_orders
         )
-
-
 
         create_orders = [
             self._composer.SpotOrder(
@@ -703,11 +702,9 @@ class InjectiveSpotStrategy(Strategy):
         for idx, order_hash in enumerate(res_msg[1].order_hashes):
             self._orders.put_nowait((order_hash, orders_list[idx]))
 
-
         if sim_res_msg is not None:
             return (res_msg, sim_res_msg)
         return (res_msg, None)
-
 
     async def place_and_replace_orders_same_tx(self):
         print("cross exchange strategy same tx is running")
@@ -781,7 +778,6 @@ class InjectiveSpotStrategy(Strategy):
                     pass
 
 
-
 class ExchangeClient(ABC):
     """
     ExchangeClient interface
@@ -807,7 +803,14 @@ class ExchangeClient(ABC):
 
 
 class InjectiveSpotClient(ExchangeClient):
-    def __init__(self, base: str, quote: str, config: ConfigParser, network: Network, insecure:bool):
+    def __init__(
+        self,
+        base: str,
+        quote: str,
+        config: ConfigParser,
+        network: Network,
+        insecure: bool,
+    ):
         self._base = base if base != "eth" else "weth"
         self._quote = quote
         self._strategies = []
@@ -975,8 +978,8 @@ async def run_all(
     quote: str,
     min_base_asset_balance: float,
     min_quote_asset_balance: float,
-    min_order_size:float,
-    insecure:bool=False
+    min_order_size: float,
+    insecure: bool = False,
 ):
     """
     set up all clients
@@ -1025,10 +1028,10 @@ def run_cross_exchange_market_making(config, ini_config):
 
     if config["is_mainnet"] == "true":
         network = Network.mainnet()
-        insecure=False
+        insecure = False
     else:
         network = Network.testnet()
-        insecure=False
+        insecure = False
 
     if isinstance(inj_key, str) and isinstance(private_key, str):
         run(
@@ -1043,7 +1046,7 @@ def run_cross_exchange_market_making(config, ini_config):
                 min_quote_asset_balance=min_quote_asset_balance,
                 min_order_size=min_order_size,
                 insecure=insecure,
-       )
+            )
         )
     else:
         print("Error in INJ KEY AND PRIVIATE KEY", type(inj_key), type(private_key))

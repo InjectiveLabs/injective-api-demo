@@ -1,4 +1,4 @@
-from perp_template import PerpTemplate
+from core.templates.perp_template import PerpTemplate
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio

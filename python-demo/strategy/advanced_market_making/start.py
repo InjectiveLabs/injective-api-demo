@@ -4,7 +4,8 @@ from asyncio import (
     create_task,
     get_event_loop,
 )
-from utilities import (
+
+from util.misc import (
     config_check,
     shutdown,
     handle_exception,

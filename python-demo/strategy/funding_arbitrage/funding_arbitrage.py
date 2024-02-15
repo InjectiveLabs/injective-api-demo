@@ -1,4 +1,4 @@
-from perp_template import PerpTemplate
+from core.templates.perp_template import PerpTemplate
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
@@ -11,6 +11,7 @@ from binance.enums import *
 import traceback
 from binance import AsyncClient, BinanceSocketManager
 import time
+
 
 class Demo(PerpTemplate):
     def __init__(self, setting, logger, mainnet_configs, testnet_configs):
@@ -44,14 +45,12 @@ class Demo(PerpTemplate):
             self.start_time = datetime.strptime(self.setting["start_time"])
         else:
             self.start_time = datetime.utcnow()
-            self.setting["start_time"] = self.start_time.strftime(
-                "%Y-%m-%d %H:%M%S.%f")
+            self.setting["start_time"] = self.start_time.strftime("%Y-%m-%d %H:%M%S.%f")
 
         self.add_schedule()
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.get_init_position())
-        loop.run_until_complete(
-            self.get_open_orders(self.acc_id, self.market_id))
+        loop.run_until_complete(self.get_open_orders(self.acc_id, self.market_id))
         loop.run_until_complete(self.get_orderbook())
         self.msg_list = []
 
@@ -60,8 +59,7 @@ class Demo(PerpTemplate):
 
     def add_schedule(self):
         self.sched = AsyncIOScheduler()
-        self.sched.add_job(self.on_timer, 'interval',
-                           seconds=self.interval)
+        self.sched.add_job(self.on_timer, "interval", seconds=self.interval)
 
     def subscribe_stream(self):
         self.tasks = [
@@ -72,7 +70,7 @@ class Demo(PerpTemplate):
             asyncio.Task(self.subscribe_binance_orderbook()),
             asyncio.Task(self.subscribe_inj_exchange_funding()),
             asyncio.Task(self.subscribe_binance_exchange_funding()),
-            asyncio.Task(self.subscribe_binance_position())
+            asyncio.Task(self.subscribe_binance_position()),
         ]
 
     async def subscribe_inj_exchange_funding(self):
@@ -81,13 +79,20 @@ class Demo(PerpTemplate):
             # print(market)
             if market.market.market_id == self.market_id:
                 hourly_interest_rate = float(
-                    market.market.perpetual_market_info.hourly_interest_rate)
-                funding_cap = float(market.market.perpetual_market_info.hourly_funding_rate_cap)
-                cumulative_price = float(market.market.perpetual_market_funding.cumulative_price)
-                divisor = (time.time() % 3600 )* 24
+                    market.market.perpetual_market_info.hourly_interest_rate
+                )
+                funding_cap = float(
+                    market.market.perpetual_market_info.hourly_funding_rate_cap
+                )
+                cumulative_price = float(
+                    market.market.perpetual_market_funding.cumulative_price
+                )
+                divisor = (time.time() % 3600) * 24
                 twap_est = cumulative_price / divisor
-                self.inj_funding_rate = max(min(hourly_interest_rate + twap_est, funding_cap), -funding_cap)
-                
+                self.inj_funding_rate = max(
+                    min(hourly_interest_rate + twap_est, funding_cap), -funding_cap
+                )
+
                 # Only execute in the last 30 mins
                 if time.time() % 3600 > 1800:
                     await self.on_funding_rates()
@@ -119,13 +124,21 @@ class Demo(PerpTemplate):
             self.msg_list = []
             if self.inj_funding_rate > 0 and self.net_position < self.order_size:
                 # Use the most closed price in inj orderbook to execute the first leg
-                await self.inj_limit_buy(self.inj_ask_price_1 - self.tick_size, (self.order_size - self.net_position))
+                await self.inj_limit_buy(
+                    self.inj_ask_price_1 - self.tick_size,
+                    (self.order_size - self.net_position),
+                )
             elif self.inj_funding_rate < 0 and self.net_position > -self.order_size:
                 # Use the most closed price in inj orderbook to execute the first leg
-                await self.inj_limit_sell(self.inj_bid_price_1 + self.tick_size, (self.order_size - self.net_position))
+                await self.inj_limit_sell(
+                    self.inj_bid_price_1 + self.tick_size,
+                    (self.order_size - self.net_position),
+                )
 
     async def subscribe_binance_position(self):
-        binance_client = await AsyncClient.create(self.binance_api_key, self.binance_api_secret)
+        binance_client = await AsyncClient.create(
+            self.binance_api_key, self.binance_api_secret
+        )
         bm = BinanceSocketManager(binance_client)
         user_ts = bm.futures_user_socket()
         async with user_ts as tscm:
@@ -133,9 +146,9 @@ class Demo(PerpTemplate):
                 res = await tscm.recv()
                 if not res:
                     continue
-                if res['e'] == 'ACCOUNT_UPDATE':
+                if res["e"] == "ACCOUNT_UPDATE":
                     # binance doc: https://binance-docs.github.io/apidocs/futures/en/#event-balance-and-position-update
-                    asset = res['a']
+                    asset = res["a"]
                     positions = asset["P"]
                     # "P":[
                     #     {
@@ -150,25 +163,32 @@ class Demo(PerpTemplate):
                     #     }，
                     #     ]
                     for position in positions:
-                        if position['s'] == self.symbol:
-                            self.net_position_binance = float(
-                                position['pa'])
+                        if position["s"] == self.symbol:
+                            self.net_position_binance = float(position["pa"])
                             await self.on_binance_position()
-                elif res['e'] == 'error':
-                    self.logger.critical(
-                        'websocket error, {}'.format(res))
+                elif res["e"] == "error":
+                    self.logger.critical("websocket error, {}".format(res))
 
     async def on_position(self, position_data: PositionData):
-        self.net_position = position_data.quantity if position_data.direction == "long" else - \
+        self.net_position = (
             position_data.quantity
+            if position_data.direction == "long"
+            else -position_data.quantity
+        )
 
     async def on_binance_position(self):
         if self.net_position + self.net_position_binance != 0:
             if self.net_position_binance > -self.net_position:
                 # Use limit order(Taker) to execute the second leg
-                await self.binance_limit_sell(self.binance_bp1, abs(-self.net_position - self.net_position_binance))
+                await self.binance_limit_sell(
+                    self.binance_bp1,
+                    abs(-self.net_position - self.net_position_binance),
+                )
             elif self.net_position_binance < -self.net_position:
-                await self.binance_limit_buy(self.binance_ap1, abs(-self.net_position - self.net_position_binance))
+                await self.binance_limit_buy(
+                    self.binance_ap1,
+                    abs(-self.net_position - self.net_position_binance),
+                )
 
     async def subscribe_binance_orderbook(self):
         binance_client = await AsyncClient.create()
@@ -199,10 +219,12 @@ class Demo(PerpTemplate):
         position = await self.get_position()
         if len(position.positions) > 0:
             position_data = position.positions[0]
-            self.net_position = float(
-                position_data.quantity) if position_data.direction == "long" else -float(position_data.quantity)
-            self.logger.info(
-                f"net position in {self.symbol}:{self.net_position}")
+            self.net_position = (
+                float(position_data.quantity)
+                if position_data.direction == "long"
+                else -float(position_data.quantity)
+            )
+            self.logger.info(f"net position in {self.symbol}:{self.net_position}")
         else:
             self.logger.info("net position is zero")
             self.net_position = 0
@@ -218,31 +240,36 @@ class Demo(PerpTemplate):
         if not self.tick:
             self.logger.critical("self.tick is None")
             return
-        if self.ap1 > 0 and self.bp1 > 0 and self.binance_ap1 > 0 and self.binance_bp1 > 0:
+        if (
+            self.ap1 > 0
+            and self.bp1 > 0
+            and self.binance_ap1 > 0
+            and self.binance_bp1 > 0
+        ):
             self.logger.critical("failed to get latest orderbook price")
             return
 
     async def binance_limit_buy(self, price, order_size):
         client = await AsyncClient.create(self.binance_api_key, self.binance_api_secret)
-        await client.futures_create_order(symbol=self.symbol,
-                                          side=SIDE_BUY,
-                                          type=ORDER_TYPE_LIMIT,
-                                          timeInForce=TIME_IN_FORCE_GTC,
-                                          quantity=floor_to(
-                                              order_size, self.step_size),
-                                          price=price
-                                          )
+        await client.futures_create_order(
+            symbol=self.symbol,
+            side=SIDE_BUY,
+            type=ORDER_TYPE_LIMIT,
+            timeInForce=TIME_IN_FORCE_GTC,
+            quantity=floor_to(order_size, self.step_size),
+            price=price,
+        )
 
     async def binance_limit_sell(self, price, order_size):
         client = await AsyncClient.create(self.binance_api_key, self.binance_api_secret)
-        await client.futures_create_order(symbol=self.symbol,
-                                          side=SIDE_SELL,
-                                          type=ORDER_TYPE_LIMIT,
-                                          timeInForce=TIME_IN_FORCE_GTC,
-                                          quantity=floor_to(
-                                              order_size, self.step_size),
-                                          price=price
-                                          )
+        await client.futures_create_order(
+            symbol=self.symbol,
+            side=SIDE_SELL,
+            type=ORDER_TYPE_LIMIT,
+            timeInForce=TIME_IN_FORCE_GTC,
+            quantity=floor_to(order_size, self.step_size),
+            price=price,
+        )
 
     async def inj_limit_buy(self, price, order_size):
         self.msg_list.append(
@@ -254,11 +281,15 @@ class Demo(PerpTemplate):
                 price=ceil_to(price * (1 + 0.00001), self.tick_size),
                 quantity=floor_to(order_size, self.step_size),
                 leverage=1,
-                is_buy=True
-            ))
+                is_buy=True,
+            )
+        )
 
         self.logger.info(
-            "long {} {} @price{} on injective exchange".format(self.order_size, self.base_asset, price))
+            "long {} {} @price{} on injective exchange".format(
+                self.order_size, self.base_asset, price
+            )
+        )
         (sim_res, success) = await self.send_tx()
         return (sim_res, success)
 
@@ -272,18 +303,22 @@ class Demo(PerpTemplate):
                 price=floor_to(price * (1 - 0.00001), self.tick_size),
                 quantity=floor_to(order_size, self.step_size),
                 leverage=1,
-                is_buy=False
-            ))
+                is_buy=False,
+            )
+        )
 
         self.logger.info(
-            "short {} {} @price{} on injective exchange".format(self.order_size, self.base_asset, price))
+            "short {} {} @price{} on injective exchange".format(
+                self.order_size, self.base_asset, price
+            )
+        )
         (sim_res, success) = await self.send_tx()
         return (sim_res, success)
 
     async def send_tx(self):
         tx = (
             Transaction()
-            .with_messages(* self.msg_list)
+            .with_messages(*self.msg_list)
             .with_sequence(self.address.get_sequence())
             .with_account_num(self.address.get_number())
             .with_chain_id(self.network.chain_id)
@@ -296,24 +331,34 @@ class Demo(PerpTemplate):
         (sim_res, success) = await self.client.simulate_tx(sim_tx_raw_bytes)
         if not success:
             self.logger.warning(
-                "simulation failed, simulation response:{}".format(sim_res))
+                "simulation failed, simulation response:{}".format(sim_res)
+            )
             return
         sim_res_msg = ProtoMsgComposer.MsgResponses(
-            sim_res.result.data, simulation=True)
+            sim_res.result.data, simulation=True
+        )
         self.logger.info(
-            "simulation passed, simulation msg response {}".format(sim_res_msg))
+            "simulation passed, simulation msg response {}".format(sim_res_msg)
+        )
 
         # build tx
-        gas_limit = sim_res.gas_info.gas_used + \
-            20000  # add 20k for gas, fee computation
-        fee = [self.composer.Coin(
-            amount=self.gas_price * gas_limit,
-            denom=self.network.fee_denom,
-        )]
+        gas_limit = (
+            sim_res.gas_info.gas_used + 20000
+        )  # add 20k for gas, fee computation
+        fee = [
+            self.composer.Coin(
+                amount=self.gas_price * gas_limit,
+                denom=self.network.fee_denom,
+            )
+        ]
         block = await self.client.get_latest_block()
         current_height = block.block.header.height
-        tx = tx.with_gas(gas_limit).with_fee(fee).with_memo(
-            "").with_timeout_height(current_height+50)
+        tx = (
+            tx.with_gas(gas_limit)
+            .with_fee(fee)
+            .with_memo("")
+            .with_timeout_height(current_height + 50)
+        )
         sign_doc = tx.get_sign_doc(self.pub_key)
         sig = self.priv_key.sign(sign_doc.SerializeToString())
         tx_raw_bytes = tx.get_tx_data(sig, self.pub_key)
@@ -327,12 +372,19 @@ class Demo(PerpTemplate):
         if order_data.state == "booked":
             self.active_orders[order_data.order_hash] = order_data
 
-        if fabs(order_data.unfilled_quantity) < 1e-7 or order_data.state == "filled" or order_data.state == "canceled":
+        if (
+            fabs(order_data.unfilled_quantity) < 1e-7
+            or order_data.state == "filled"
+            or order_data.state == "canceled"
+        ):
             try:
                 self.active_orders.pop(order_data.order_hash)
             except Exception as e:
                 self.logger.error(
-                    "unexcepted order hash, can't pop it from active orders. {}".format(e))
+                    "unexcepted order hash, can't pop it from active orders. {}".format(
+                        e
+                    )
+                )
                 self.logger.error(traceback.format_exc())
 
     async def on_account(self, account_data):
@@ -348,8 +400,9 @@ class Demo(PerpTemplate):
                     sender=self.sender,
                     market_id=self.market_id,
                     subaccount_id=self.acc_id,
-                    order_hash=order_hash
-                ))
+                    order_hash=order_hash,
+                )
+            )
 
     def inventory_management(self):
         pass
